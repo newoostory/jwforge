@@ -60,16 +60,7 @@ for skill_name in jwforge surface cancel commit verify simplify; do
   fi
 done
 
-# --- 2. Remove commands ---
-
-for cmd_name in deep surface cancel commit verify; do
-  if [ -f "$CLAUDE_DIR/commands/$cmd_name.md" ]; then
-    rm -f "$CLAUDE_DIR/commands/$cmd_name.md"
-    echo "[OK] /$cmd_name command removed"
-  fi
-done
-
-# --- 3. Remove runtime files ---
+# --- 2. Remove runtime files ---
 
 if [ -d "$RUNTIME_DIR" ]; then
   rm -rf "$RUNTIME_DIR"

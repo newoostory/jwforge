@@ -112,22 +112,9 @@ for skill_dir in "$JWFORGE_HOME/.claude/skills"/*/; do
   echo "  [OK] /$skill_name skill -> $TARGET_SKILL/SKILL.md"
 done
 
-# --- 2. Install Commands ---
+# --- 2. Install JWForge runtime files ---
 
-echo "[2/5] Installing commands..."
-
-COMMANDS_DIR="$CLAUDE_DIR/commands"
-mkdir -p "$COMMANDS_DIR"
-
-for cmd_file in "$JWFORGE_HOME/.claude/commands"/*.md; do
-  cmd_name="$(basename "$cmd_file")"
-  copy_file "$cmd_file" "$COMMANDS_DIR/$cmd_name"
-  echo "  [OK] /${cmd_name%.md} command -> $COMMANDS_DIR/$cmd_name"
-done
-
-# --- 3. Install JWForge runtime files ---
-
-echo "[3/5] Installing runtime files..."
+echo "[2/4] Installing runtime files..."
 
 # Create jwforge runtime directory inside .claude
 RUNTIME_DIR="$CLAUDE_DIR/jwforge"
@@ -150,9 +137,9 @@ echo "  [OK] hooks/ -> $RUNTIME_DIR/hooks/"
 copy_dir "$JWFORGE_HOME/skills" "$RUNTIME_DIR/skills"
 echo "  [OK] skills/ -> $RUNTIME_DIR/skills/"
 
-# --- 4. Patch paths in installed files ---
+# --- 3. Patch paths in installed files ---
 
-echo "[4/5] Configuring paths..."
+echo "[3/4] Configuring paths..."
 
 RUNTIME_DIR_NODE="$(to_node_path "$RUNTIME_DIR")"
 
@@ -166,19 +153,11 @@ for skill_file in "$CLAUDE_DIR/skills"/*/SKILL.md; do
   fi
 done
 
-# Patch all command files
-for cmd_file in "$COMMANDS_DIR"/*.md; do
-  if [[ -f "$cmd_file" ]]; then
-    sed -i "s|config/settings.json|$RUNTIME_DIR_NODE/config/settings.json|g" "$cmd_file"
-    sed -i "s|in \`agents/\`|in \`$RUNTIME_DIR_NODE/agents/\`|g" "$cmd_file"
-    sed -i "s|in \`templates/\`|in \`$RUNTIME_DIR_NODE/templates/\`|g" "$cmd_file"
-  fi
-done
 echo "  [OK] Paths configured to $RUNTIME_DIR_NODE"
 
-# --- 5. Register hooks ---
+# --- 4. Register hooks ---
 
-echo "[5/5] Registering hooks..."
+echo "[4/4] Registering hooks..."
 
 # Read hooks.json and register into settings.json
 HOOKS_JSON="$JWFORGE_HOME/hooks/hooks.json"
@@ -276,8 +255,8 @@ echo "================================"
 echo "  JWForge installed successfully"
 echo "================================"
 echo ""
-echo "Commands available:"
-echo "  /deep <task>     Full pipeline (new features, complex changes)"
+echo "Skills available:"
+echo "  /jwforge <task>  Full pipeline (new features, complex changes)"
 echo "  /surface <task>  Light pipeline (bug fix, refactor, config)"
 echo ""
 echo "To uninstall: bash $JWFORGE_HOME/uninstall.sh $([ "$INSTALL_MODE" == "local" ] && echo "--local $(dirname "$CLAUDE_DIR")")"
