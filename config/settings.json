@@ -1,0 +1,43 @@
+{
+  "name": "jwforge",
+  "version": "0.2.0",
+  "description": "Team-based multi-agent orchestration pipeline for Claude Code",
+  "triggers": ["/deep", "/surface"],
+  "skill_path": "skills/jwforge.md",
+  "agents_dir": "agents/",
+  "templates_dir": "templates/",
+  "storage_dir": ".jwforge/",
+  "defaults": {
+    "architect_model": "opus",
+    "reviewer_model": "opus",
+    "min_executor_model": "sonnet",
+    "analyzer_model": "sonnet",
+    "tester_model": "sonnet",
+    "fixer_model_initial": "sonnet",
+    "fixer_model_upgrade": "opus",
+    "haiku_collector_model": "haiku",
+    "max_parallel_analyzers": 10,
+    "max_retry_count": 3,
+    "max_architect_redesign_retry": 2
+  },
+  "team": {
+    "initial_members": ["architect", "reviewer"],
+    "dynamic_members": ["executor", "analyzer", "tester", "fixer"]
+  },
+  "git": {
+    "commit_prefix": "[jwforge]",
+    "impl_done_tag": "jwforge/impl-done"
+  },
+  "surface": {
+    "executor_model": "sonnet",
+    "haiku_model": "haiku",
+    "max_executor_count": 2,
+    "max_retry_count": 1,
+    "commit_prefix": "[jwforge-surface]"
+  },
+  "cost_warning": {
+    "enabled": true,
+    "show_agent_estimate": true,
+    "confirm_on_xl": true
+  }
+}
