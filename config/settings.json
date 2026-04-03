@@ -21,8 +21,8 @@
     "max_architect_redesign_retry": 2
   },
   "team": {
-    "initial_members": ["architect", "reviewer"],
-    "dynamic_members": ["executor", "analyzer", "tester", "fixer"]
+    "members": ["conductor", "architect", "reviewer"],
+    "subagents": ["executor", "analyzer", "tester", "fixer"]
   },
   "git": {
     "commit_prefix": "[jwforge]",

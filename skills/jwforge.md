@@ -34,24 +34,28 @@ When the user invokes `/deep <task description>`, you take that task and drive i
 
 The team is created AFTER Phase 1 completes (M/L/XL complexity only). S complexity does not use teams.
 
+**Team members (persistent):** Conductor (team leader), Architect (opus), Reviewer (opus)
+**Subagents (ephemeral, regular Agent tool):** Executor, Analyzer, Tester, Fixer
+
 ```
 Phase 1 complete (task-spec.md written)
     |
     v
 TeamCreate("jwforge-{task-slug}")
+    +-- Conductor (team leader) -- orchestrates all phases
     +-- Architect teammate (opus) -- design + redesign, lives until pipeline ends
     +-- Reviewer teammate (opus)  -- code review, lives until pipeline ends
     |
-Phase 3: +Executor teammates (level by level, sonnet/opus)
-Phase 4: +Analyzer teammates (per file, sonnet)
-         +Tester teammate (sonnet)
-         +Fixer teammates (as needed, sonnet/opus)
+Phase 3: Executor subagents (level by level, sonnet/opus) -- spawned via Agent tool
+Phase 4: Analyzer subagents (per file, sonnet) -- spawned via Agent tool
+         Tester subagent (sonnet) -- spawned via Agent tool
+         Fixer subagents (as needed, sonnet/opus) -- spawned via Agent tool
     |
     v
 TeamDelete (after Phase 4 or on pipeline stop)
 ```
 
-**Team communication:** All coordination happens via SendMessage. Conductor sends work requests, teammates send reports back.
+**Team communication:** Conductor ↔ Architect/Reviewer via SendMessage. Executor/Analyzer/Tester/Fixer are regular Agent subagents that return results directly.
 
 ---
 
@@ -397,7 +401,7 @@ Update state.json: `phase2.status: "done"`, `phase: 3`, `step: "3-1"`
 
 ## Phase 3: Execute
 
-**Goal:** Implement the code by adding Executor teammates level-by-level in parallel.
+**Goal:** Implement the code by spawning Executor subagents level-by-level in parallel.
 
 ### Step 3-1: Execution Preparation (Conductor)
 
@@ -422,15 +426,14 @@ Update state.json: `phase2.status: "done"`, `phase: 3`, `step: "3-1"`
 ```
 For each level (0, 1, 2, ...):
   1. Read agents/executor.md
-  2. For each task in this level, add an Executor teammate to the team IN PARALLEL:
+  2. For each task in this level, spawn Executor subagents IN PARALLEL:
      Agent(
        model=<task.model>,
        name="executor-{task-number}",
-       team_name="jwforge-{task-slug}",
        prompt=<content of agents/executor.md + assigned task details>
      )
-  3. Wait for ALL executors in this level to report back via SendMessage
-  4. Collect all Executor Reports
+  3. Wait for ALL executor subagents in this level to return results
+  4. Collect all Executor Reports (from Agent return values)
   5. Check for partial/failed -> handle via Step 3-7
   6. Git commit: [jwforge] impl: Level {N} complete
   7. Update state.json: current_level++, add to completed_levels
@@ -439,18 +442,18 @@ For each level (0, 1, 2, ...):
 ```
 
 **Execution rules:**
-- Same level = all Executor teammates added simultaneously (parallel)
-- Next level waits for ALL executors in current level to send completion reports
+- Same level = all Executor subagents spawned simultaneously (parallel)
+- Next level waits for ALL executor subagents in current level to return
 - partial/failed -> retry must complete before next level starts
 
 ### Step 3-3: Executor Agent Behavior
 
-Each Executor teammate receives in their spawn prompt:
+Each Executor subagent receives in their spawn prompt:
 - task-spec.md path
 - architecture.md path
 - Their assigned Task section
 - Previous level results summary (for Level 1+)
-- Instruction to report via SendMessage when done
+- Instruction to return the Executor Report as their final output
 
 **Behavior by task tag:**
 | Tag | First Action | Freedom | Required Check |
@@ -461,7 +464,7 @@ Each Executor teammate receives in their spawn prompt:
 
 ### Step 3-4: Executor Completion Report
 
-Each Executor sends via SendMessage to Conductor:
+Each Executor subagent returns the following report as its result:
 ```markdown
 ## Executor Report: {Task number} - {feature name}
 - status: done | partial | failed
@@ -476,11 +479,11 @@ Each Executor sends via SendMessage to Conductor:
 
 When Level N completes -> before starting Level N+1:
 
-1. Collect all Level N Executor Reports (from SendMessage)
+1. Collect all Level N Executor Reports (from Agent return values)
 2. **File existence verification:** For each `files_created` and `files_modified` in reports, use Glob to confirm the files actually exist. If a file is missing, treat the Executor report as `partial` and trigger retry.
 3. Check for `partial` or `failed` -> branch to Step 3-7
 4. Summarize all `exports` -> include in Level N+1 Executor prompts
-5. Add Level N+1 Executor teammates
+5. Spawn Level N+1 Executor subagents
 
 **Info passed to next level (summarized, NOT raw reports):**
 - Files created/modified in previous level (verified to exist)
@@ -502,19 +505,19 @@ Update state.json: `phase3.status: "done"`, `phase: 4`, `step: "4-1"`
 
 **Retry flow for sonnet Executor failure:**
 ```
-Attempt 1 failed -> SendMessage to same Executor with error details
-Attempt 2 failed -> Add new opus Executor teammate (upgrade model)
+Attempt 1 failed -> Spawn new sonnet Executor subagent with error details
+Attempt 2 failed -> Spawn new opus Executor subagent (upgrade model)
 Attempt 3 failed -> SendMessage to Architect (teammate, reuse) for redesign
-                    -> Add new Executor for redesigned Task
+                    -> Spawn new Executor subagent for redesigned Task
 Post-redesign attempt 1 failed -> retry once more
 Post-redesign attempt 2 failed -> STOP Phase 3, report to user
 ```
 
 **Retry flow for opus Executor failure:**
 ```
-Attempt 1 failed -> SendMessage to same Executor with error details
-Attempt 2 failed -> SendMessage again with more context
-Attempt 3 failed -> SendMessage to Architect for redesign -> new Executor
+Attempt 1 failed -> Spawn new opus Executor subagent with error details
+Attempt 2 failed -> Spawn new opus Executor subagent with more context
+Attempt 3 failed -> SendMessage to Architect for redesign -> new Executor subagent
 Post-redesign attempt 1 failed -> retry once more
 Post-redesign attempt 2 failed -> STOP Phase 3, report to user
 ```
@@ -560,9 +563,9 @@ Conductor prepares from Phase 3 results:
 
 Update state.json: `phase4.status: "in_progress"`, `step: "4-2"`
 
-### Step 4-2: Code Analysis (Analyzer teammates, parallel)
+### Step 4-2: Code Analysis (Analyzer subagents, parallel)
 
-Add one Analyzer teammate per created/modified file, in parallel.
+Spawn one Analyzer subagent per created/modified file, in parallel.
 
 **Batch limit:** Max 10 simultaneous. If >10 files, process in batches of 10.
 **S complexity:** Skip Analyzers. Conductor reads files directly.
@@ -573,12 +576,11 @@ For each file (batched if >10):
   Agent(
     model="sonnet",
     name="analyzer-{N}",
-    team_name="jwforge-{task-slug}",
     prompt=<content of agents/analyzer.md + file path + architecture context>
   )
 ```
 
-**Analyzer reports via SendMessage:**
+**Analyzer returns report as result:**
 ```markdown
 ## Analysis: {filename}
 - purpose: {one-line description}
@@ -608,15 +610,13 @@ Before spawning the Tester, Conductor checks for an existing test environment:
 - For Python: Tester should ensure pytest is available
 - For Go: built-in, no setup needed
 
-**S complexity:** Spawn 1 sonnet test agent (regular Agent tool, no team).
-**M+:** Add Tester teammate to the team.
+**All complexities:** Spawn Tester as a subagent (regular Agent tool).
 
 ```
 Read agents/tester.md
 Agent(
   model="sonnet",
   name="tester",
-  team_name="jwforge-{task-slug}",
   prompt=<content of agents/tester.md + task-spec path + analyzer summary + test env info>
 )
 ```
@@ -628,7 +628,7 @@ Agent(
 
 **Git commit after tests written:** `[jwforge] test: {task name}`
 
-**Tester reports via SendMessage:**
+**Tester returns report as result:**
 ```markdown
 ## Test Report
 - total: {total test count}
@@ -661,13 +661,12 @@ Both must pass before completion.
 
 **Purpose:** Does the code do what task-spec.md and architecture.md say it should?
 
-Spawn spec-reviewer agents in parallel (1 per modified file, sonnet, max 10 batch):
+Spawn spec-reviewer subagents in parallel (1 per modified file, sonnet, max 10 batch):
 
 ```
 Agent(
   model="sonnet",
   name="spec-reviewer-{N}",
-  team_name="jwforge-{task-slug}",
   prompt="You are a Spec Compliance Reviewer. Your ONLY job is to verify that
   the implementation matches the specification. You do NOT review code quality.
 
@@ -764,13 +763,12 @@ Step 4-6 Completion
 
 Triggered by test failures or review critical issues. **Every fix attempt gets a git commit.**
 
-Add Fixer teammate to the team:
+Spawn Fixer subagent:
 ```
 Read agents/fixer.md
 Agent(
   model="sonnet",  // upgraded to opus on 2nd attempt
   name="fixer-{N}",
-  team_name="jwforge-{task-slug}",
   prompt=<content of agents/fixer.md + failure details + affected files>
 )
 ```
@@ -780,14 +778,14 @@ Agent(
 Fix needed
   |
   v
-+Fixer teammate (sonnet) -> fix -> git commit -> re-run tests
+Fixer subagent (sonnet) -> fix -> git commit -> re-run tests
   |
   +-- All pass -> SendMessage to Reviewer for re-review (if review issue) or Step 4-6
   |
   +-- Still failing
         |
         v
-      +Fixer teammate (opus, upgraded) -> fix -> git commit -> re-run tests
+      Fixer subagent (opus, upgraded) -> fix -> git commit -> re-run tests
         |
         +-- All pass -> re-review or Step 4-6
         |
@@ -795,7 +793,7 @@ Fix needed
               |
               v
             SendMessage to Architect (reuse teammate) for redesign
-            -> new Executor teammate -> git commit -> re-run tests
+            -> new Executor subagent -> git commit -> re-run tests
               |
               +-- Pass -> re-review or Step 4-6
               +-- Fail after 2 more attempts -> STOP Phase 4, report to user
