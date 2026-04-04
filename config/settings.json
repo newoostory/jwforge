@@ -2,7 +2,7 @@
   "name": "jwforge",
   "version": "0.2.0",
   "description": "Team-based multi-agent orchestration pipeline for Claude Code",
-  "triggers": ["/deep", "/surface", "/resume"],
+  "triggers": ["/deep", "/surface", "/resume", "/selfdeep"],
   "skill_path": "skills/jwforge.md",
   "agents_dir": "agents/",
   "templates_dir": "templates/",
@@ -35,6 +35,19 @@
     "max_executor_count": 2,
     "max_retry_count": 1,
     "commit_prefix": "[jwforge-surface]"
+  },
+  "selfdeep": {
+    "sandbox_path": "~/.claude/jwforge-sandbox/",
+    "analyzer_model": "sonnet",
+    "researcher_model": "sonnet",
+    "improver_model": "opus",
+    "verifier_model": "sonnet",
+    "reporter_model": "sonnet",
+    "conversation_log_path": "~/.claude/projects/",
+    "archive_path": ".jwforge/archive/",
+    "notion_fallback": "terminal",
+    "auto_fix_on_verify_fail": true,
+    "max_improvements_per_run": 10
   },
   "cost_warning": {
     "enabled": true,

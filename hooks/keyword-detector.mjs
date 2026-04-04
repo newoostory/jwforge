@@ -39,6 +39,8 @@ const KEYWORDS = [
   { patterns: ['surface', '/surface', 'quick fix', '빠른 수정'], skill: 'surface', priority: 3, pipeline: 'surface' },
   // Resume pipeline
   { patterns: ['resume', '/resume', '재개'], skill: 'resume', priority: 4 },
+  // Selfdeep pipeline
+  { patterns: ['selfdeep', '/selfdeep', '자가개선'], skill: 'selfdeep', priority: 5 },
   // TDD mode
   { patterns: ['tdd', 'test first', '테스트 먼저'], mode: 'tdd', priority: 10 },
   // Verify mode
