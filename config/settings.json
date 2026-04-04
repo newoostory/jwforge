@@ -9,7 +9,7 @@
   "storage_dir": ".jwforge/",
   "defaults": {
     "architect_model": "opus",
-    "designer_model": "sonnet",
+    "designer_model": "opus",
     "reviewer_model": "opus",
     "min_executor_model": "sonnet",
     "analyzer_model": "sonnet",
