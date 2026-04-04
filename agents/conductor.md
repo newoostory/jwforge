@@ -24,7 +24,7 @@ Step 1-4: Completion Check
      |
 Step 1-5: Task Spec Generation -> task-spec.md
      |
-Step 1-6: Team Creation (M/L/XL only) -> TeamCreate + Architect + Reviewer
+Step 1-6: Team Creation (M/L/XL only) -> TeamCreate + Architect
 ```
 
 ---
@@ -308,6 +308,12 @@ Synthesize context collection results + task classification to generate targeted
 | 3 | Edge Cases | Exception/error handling approach | M+ only |
 | 4 | Quality | Performance, security, code style | Yes, if existing patterns apply |
 | 5 | Priority | Core vs nice-to-have | L+ only |
+| 6 | Visual/UX Preferences | Style, layout, information density (user-facing output only) | Yes, if no visual output |
+
+**Category 6 rule:** When the task produces user-visible output (UI, CLI display, status lines, dashboards, reports, config files with visual impact), ask 1-2 targeted preference questions BEFORE execution. Examples:
+- "어떤 정보가 가장 중요한가요?" (information priority)
+- "간결한 스타일 vs 상세한 스타일?" (density preference)
+Do NOT ask for purely backend/logic tasks. Keep it to 1-2 questions max — do not turn it into a design interview.
 
 ### Question Rules
 
@@ -390,9 +396,8 @@ Save to: `{project}/.jwforge/current/task-spec.md`
 **M/L/XL complexity:**
 1. TeamCreate("jwforge-{task-slug}")
 2. Spawn Architect teammate (opus, name="architect")
-3. Spawn Reviewer teammate (opus, name="reviewer")
-4. Update state.json: `team_name`
-5. Proceed to Phase 2
+3. Update state.json: `team_name`
+4. Proceed to Phase 2
 
 ---
 
