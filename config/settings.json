@@ -2,7 +2,7 @@
   "name": "jwforge",
   "version": "0.2.0",
   "description": "Team-based multi-agent orchestration pipeline for Claude Code",
-  "triggers": ["/deep", "/surface"],
+  "triggers": ["/deep", "/surface", "/resume"],
   "skill_path": "skills/jwforge.md",
   "agents_dir": "agents/",
   "templates_dir": "templates/",
@@ -39,5 +39,9 @@
     "enabled": true,
     "show_agent_estimate": true,
     "confirm_on_xl": true
+  },
+  "notifications": {
+    "enabled": true,
+    "triggers": ["phase_transition", "user_input_wait", "pipeline_complete", "pipeline_failure"]
   }
 }

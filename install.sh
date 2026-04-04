@@ -101,10 +101,10 @@ echo ""
 
 # --- 1. Install Skills ---
 
-echo "[1/5] Installing skills..."
+echo "[1/6] Installing skills..."
 
-# Install all skills from .claude/skills/
-for skill_dir in "$JWFORGE_HOME/.claude/skills"/*/; do
+# Install all skills from skill-sources/
+for skill_dir in "$JWFORGE_HOME/skill-sources"/*/; do
   skill_name="$(basename "$skill_dir")"
   TARGET_SKILL="$CLAUDE_DIR/skills/$skill_name"
   mkdir -p "$TARGET_SKILL"
@@ -114,7 +114,7 @@ done
 
 # --- 2. Install JWForge runtime files ---
 
-echo "[2/4] Installing runtime files..."
+echo "[2/6] Installing runtime files..."
 
 # Create jwforge runtime directory inside .claude
 RUNTIME_DIR="$CLAUDE_DIR/jwforge"
@@ -139,7 +139,7 @@ echo "  [OK] skills/ -> $RUNTIME_DIR/skills/"
 
 # --- 3. Patch paths in installed files ---
 
-echo "[3/4] Configuring paths..."
+echo "[3/6] Configuring paths..."
 
 RUNTIME_DIR_NODE="$(to_node_path "$RUNTIME_DIR")"
 
@@ -157,7 +157,7 @@ echo "  [OK] Paths configured to $RUNTIME_DIR_NODE"
 
 # --- 4. Register hooks ---
 
-echo "[4/4] Registering hooks..."
+echo "[4/6] Registering hooks..."
 
 # Read hooks.json and register into settings.json
 HOOKS_JSON="$JWFORGE_HOME/hooks/hooks.json"
@@ -205,7 +205,7 @@ else
   echo "  [WARN] hooks.json not found, skipping hook registration"
 fi
 
-# --- 6. Add .jwforge/ to gitignore ---
+# --- 6/6. Add .jwforge/ to gitignore ---
 
 if [[ "$INSTALL_MODE" == "global" ]]; then
   GITIGNORE="$HOME/.gitignore_global"
@@ -237,6 +237,35 @@ else
   fi
 fi
 
+# --- 5. Install statusline ---
+
+echo "[5/6] Installing statusline..."
+
+STATUSLINE_SRC="$JWFORGE_HOME/statusline/statusline.sh"
+STATUSLINE_DST="$CLAUDE_DIR/statusline.sh"
+
+if [[ -f "$STATUSLINE_SRC" ]]; then
+  copy_file "$STATUSLINE_SRC" "$STATUSLINE_DST"
+  chmod +x "$STATUSLINE_DST"
+
+  # Register statusLine in settings.json
+  node -e "
+    const fs = require('fs');
+    const raw = fs.readFileSync('$SETTINGS_FILE_NODE', 'utf8').replace(/^\uFEFF/, '');
+    const settings = JSON.parse(raw);
+    settings.statusLine = {
+      type: 'command',
+      command: '~/.claude/statusline.sh',
+      padding: 1
+    };
+    fs.writeFileSync('$SETTINGS_FILE_NODE', JSON.stringify(settings, null, 2));
+  "
+  echo "  [OK] statusline.sh -> $STATUSLINE_DST"
+  echo "  [OK] statusLine registered in settings.json"
+else
+  echo "  [SKIP] statusline/statusline.sh not found"
+fi
+
 # --- Done ---
 
 # Write install metadata for uninstaller
@@ -258,5 +287,6 @@ echo ""
 echo "Skills available:"
 echo "  /jwforge <task>  Full pipeline (new features, complex changes)"
 echo "  /surface <task>  Light pipeline (bug fix, refactor, config)"
+echo "  /resume          Resume a stopped pipeline"
 echo ""
 echo "To uninstall: bash $JWFORGE_HOME/uninstall.sh $([ "$INSTALL_MODE" == "local" ] && echo "--local $(dirname "$CLAUDE_DIR")")"

@@ -75,6 +75,16 @@
             "timeout": 3
           }
         ]
+      },
+      {
+        "matcher": "Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PLUGIN_ROOT\"/hooks/notify.mjs",
+            "timeout": 3
+          }
+        ]
       }
     ],
     "PreCompact": [
@@ -102,6 +112,11 @@
             "type": "command",
             "command": "node \"$CLAUDE_PLUGIN_ROOT\"/hooks/persistent-mode.mjs",
             "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PLUGIN_ROOT\"/hooks/notify.mjs",
+            "timeout": 3
           }
         ]
       }
