@@ -14,7 +14,7 @@
  */
 
 import { execSync } from 'child_process';
-import { readFileSync, existsSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
 import { join } from 'path';
 
 function readStdin() {
@@ -47,8 +47,28 @@ function sendNotification(title, body) {
 
 const PHASE_NAMES = { 1: 'Deep Interview', 2: 'Architecture', 3: 'Execute', 4: 'Verify' };
 
+const CACHE_FILE_NAME = '.notify-cache.json';
+
+function readCachedState(cwd) {
+  try {
+    const cachePath = join(cwd, '.jwforge', 'current', CACHE_FILE_NAME);
+    if (existsSync(cachePath)) {
+      return JSON.parse(readFileSync(cachePath, 'utf8'));
+    }
+  } catch { /* ignore */ }
+  return null;
+}
+
+function writeCachedState(cwd, state) {
+  try {
+    const cacheDir = join(cwd, '.jwforge', 'current');
+    if (!existsSync(cacheDir)) mkdirSync(cacheDir, { recursive: true });
+    writeFileSync(join(cacheDir, CACHE_FILE_NAME), JSON.stringify({ phase: state.phase, step: state.step, status: state.status }));
+  } catch { /* ignore */ }
+}
+
 function detectNotification(oldState, newState) {
-  const step = (newState.current_step || '').toLowerCase();
+  const step = (newState.step || '').toLowerCase();
   const status = newState.status;
   const phase = newState.phase;
 
@@ -105,43 +125,35 @@ async function handleStop(data) {
 }
 
 async function handlePostToolUse(data) {
-  // Only care about Write tool calls on state.json
+  // Accept both Write and Edit tool calls on state.json
   const toolName = data?.tool_name || '';
   const filePath = data?.tool_input?.file_path || data?.tool_input?.path || '';
 
-  if (toolName !== 'Write' || !filePath.endsWith('state.json') || !filePath.includes('.jwforge')) {
+  if ((toolName !== 'Write' && toolName !== 'Edit') || !filePath.endsWith('state.json') || !filePath.includes('.jwforge')) {
     console.log(JSON.stringify({ continue: true }));
     return;
   }
 
-  // Read old state (before this write) to detect transitions
-  let oldState = null;
-  try {
-    if (existsSync(filePath)) {
-      oldState = JSON.parse(readFileSync(filePath, 'utf8'));
-    }
-  } catch { /* ignore — first write or unreadable */ }
+  const cwd = process.env.CLAUDE_CWD || process.cwd();
 
-  // Read the newly written state from tool_output (PostToolUse delivers result)
-  // Fallback: re-read the file (it has already been written when PostToolUse fires)
+  // Read old state from cache (written on previous invocation)
+  const oldState = readCachedState(cwd);
+
+  // Read the current (post-write) state from the file
   let state;
   try {
-    const outputContent = data?.tool_response?.content || data?.output?.content || '';
-    if (outputContent) {
-      // tool_response contains the new file content only for some hook shapes — try parsing
-      try { state = JSON.parse(outputContent); } catch { state = null; }
+    if (!existsSync(filePath)) {
+      console.log(JSON.stringify({ continue: true }));
+      return;
     }
-    if (!state) {
-      if (!existsSync(filePath)) {
-        console.log(JSON.stringify({ continue: true }));
-        return;
-      }
-      state = JSON.parse(readFileSync(filePath, 'utf8'));
-    }
+    state = JSON.parse(readFileSync(filePath, 'utf8'));
   } catch {
     console.log(JSON.stringify({ continue: true }));
     return;
   }
+
+  // Cache current state for next comparison
+  writeCachedState(cwd, state);
 
   const notification = detectNotification(oldState, state);
   if (notification) {
