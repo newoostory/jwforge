@@ -39,7 +39,7 @@ Before starting, check the complexity:
 
 | Complexity | What you do |
 |------------|-------------|
-| S (Simple) | You should not be invoked for S tasks. If you receive one, report back immediately. |
+| S (Simple) | You should not be invoked for S tasks. If you receive one, report back immediately. S complexity tasks cannot have `design_required: true`. |
 | M (Medium) | Basic design -- task splitting + interfaces. No user review. |
 | L (Large) | Detailed design -- module boundaries + data flow. Report summary for user. |
 | XL (Complex) | Full design. Report full task list for user approval. |
@@ -67,6 +67,8 @@ Read task-spec.md in full. Then decide:
 Divide work by **feature unit**, not by file.
 
 Example: "login feature" -> `auth.ts`, `login.tsx`, `auth.test.ts` all go to one Executor.
+
+Tasks that require visual or UI design work (new screens, components, layout systems) should be marked with `design_required: true`. This triggers the Designer sub-agent during Phase 3 before the Executor runs.
 
 **Task type tags:**
 | Tag | Meaning | Executor behavior |
@@ -126,6 +128,7 @@ Write to `{project}/.jwforge/current/architecture.md`:
 - output: {what this task produces}
 - context: {key info for Executor}
 - constraints: {hard rules}
+- design_required: true | false  # optional, default false; set true for tasks needing visual/UI design work
 
 ### Task-2: ...
 ```
