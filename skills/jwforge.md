@@ -35,7 +35,7 @@ When the user invokes `/deep <task description>`, you take that task and drive i
 The team is created AFTER Phase 1 completes (M/L/XL complexity only). S complexity does not use teams.
 
 **Team members (persistent):** Conductor (team leader), Architect (opus)
-**Subagents (ephemeral, regular Agent tool):** Reviewer (Phase 1/2/4, opus), Executor, Analyzer, Tester, Fixer
+**Subagents (ephemeral, regular Agent tool):** Reviewer (Phase 1/2/4, opus), Designer (Phase 3, sonnet), Executor, Analyzer, Tester, Fixer
 
 ```
 Phase 1 complete (task-spec.md written)
@@ -47,7 +47,8 @@ TeamCreate("jwforge-{task-slug}")
     |
 Phase 1: Reviewer subagent (opus) -- spawned via Agent tool (gap review)
 Phase 2: Reviewer subagent (opus) -- spawned via Agent tool (architecture compliance)
-Phase 3: Executor subagents (level by level, sonnet/opus) -- spawned via Agent tool
+Phase 3: Designer subagents (per task with design_required, sonnet) -- spawned via Agent tool
+         Executor subagents (level by level, sonnet/opus) -- spawned via Agent tool
 Phase 4: Analyzer subagents (per file, sonnet) -- spawned via Agent tool
          Reviewer subagent (opus) -- spawned via Agent tool (code quality review)
          Tester subagent (sonnet) -- spawned via Agent tool
@@ -478,25 +479,106 @@ Update state.json: `phase2.status: "done"`, `phase: 3`, `step: "3-1"`
 ```
 For each level (0, 1, 2, ...):
   1. Read agents/executor.md
-  2. For each task in this level, spawn Executor subagents IN PARALLEL:
+  2. For each task in this level:
+     a. Check if task has `design_required: true`
+     b. If YES → run Designer Flow (Step 3-2b) for this task BEFORE spawning its Executor
+     c. If NO → proceed directly to Executor spawn
+  3. Spawn Executor subagents for all tasks in this level IN PARALLEL:
      Agent(
        model=<task.model>,
        name="executor-{task-number}",
-       prompt=<content of agents/executor.md + assigned task details>
+       prompt=<content of agents/executor.md + assigned task details
+              + (if design was selected) "Selected design: {path}. Implement according to this design.">
      )
-  3. Wait for ALL executor subagents in this level to return results
-  4. Collect all Executor Reports (from Agent return values)
-  5. Check for partial/failed -> handle via Step 3-7
-  6. Git commit: [jwforge] impl: Level {N} complete
-  7. Update state.json: current_level++, add to completed_levels
-  8. Prepare handoff info for next level (summarize exports, file lists, notes)
-  9. Proceed to next level
+  4. Wait for ALL executor subagents in this level to return results
+  5. Collect all Executor Reports (from Agent return values)
+  6. Check for partial/failed -> handle via Step 3-7
+  7. Git commit: [jwforge] impl: Level {N} complete
+  8. Update state.json: current_level++, add to completed_levels
+  9. Prepare handoff info for next level (summarize exports, file lists, notes)
+  10. Proceed to next level
 ```
 
 **Execution rules:**
 - Same level = all Executor subagents spawned simultaneously (parallel)
 - Next level waits for ALL executor subagents in current level to return
 - partial/failed -> retry must complete before next level starts
+- Designer Flow runs sequentially per task BEFORE Executor spawn (design must be selected first)
+- Tasks without `design_required: true` are unaffected -- no Designer is invoked
+
+### Step 3-2b: Designer Flow (when `design_required: true`)
+
+This flow runs for each task that has `design_required: true` in architecture.md. It produces design variants, evaluates them via a 3-party consensus, and passes the selected design to the Executor.
+
+**S complexity skips this entirely.** S tasks cannot have `design_required: true`.
+
+```
+1. Create `.jwforge/current/designs/` directory if not exists
+
+2. Read agents/designer.md
+
+3. Read designer_model from config/settings.json (default: "sonnet")
+
+4. Spawn Designer sub-agent:
+   Agent(
+     model=<designer_model from settings>,
+     name="designer-{task-number}",
+     prompt=<content of agents/designer.md
+       + task details from architecture.md (task number, description, context, constraints)
+       + "task-spec.md path: .jwforge/current/task-spec.md">
+   )
+
+5. Designer returns: list of design file paths + summary per style variant
+
+6. 3-Party Evaluation:
+
+   a. Conductor reads all design files produced by the Designer
+
+   b. Conductor spawns a fresh Reviewer sub-agent for design evaluation:
+      Agent(
+        model="sonnet",
+        name="design-reviewer-{task-number}",
+        prompt="Evaluate these design variants for Task-{N}.
+        Design files: {paths}
+        Task context from architecture.md: {task description + constraints}
+        Task spec: .jwforge/current/task-spec.md
+
+        Pick the best variant. Report:
+        ## Design Evaluation
+        - chosen_style: {style name}
+        - chosen_file: {file path}
+        - reasoning: {why this variant is best}
+        - concerns: {any issues with the chosen variant, or none}"
+      )
+
+   c. Conductor sends design file paths + task context to Architect (persistent teammate):
+      SendMessage(
+        to="architect",
+        message="Evaluate design variants for Task-{N}.
+        Design files: {paths}
+        Task context: {task description + constraints}
+        Pick the best variant. Report: chosen style, chosen file, reasoning."
+      )
+
+   d. Conductor makes own assessment (reads files, compares against task-spec requirements)
+
+7. Consensus:
+   - If 2+ of 3 evaluators agree on the same variant → selected design wins
+   - If all 3 disagree → Architect has final decision (tiebreaker)
+   - Max 2 evaluation rounds:
+     * If first round has no majority (all 3 disagree), Conductor sends a reconsideration
+       request to the Reviewer sub-agent and Architect with all three assessments visible
+     * Second round: majority wins, or Architect decides if still no majority
+
+8. Pass selected design file path to Executor in spawn prompt:
+   "Selected design: {path}. Implement according to this design."
+
+9. Clean up:
+   - Delete non-selected design files from `.jwforge/current/designs/`
+   - Keep the selected design file
+   - Log the choice in agent-log.jsonl:
+     {"event": "design_selected", "task": "Task-{N}", "selected": "{style}", "file": "{path}", "consensus": "{2-1|3-0|tiebreaker}", "timestamp": "..."}
+```
 
 ### Step 3-3: Executor Agent Behavior
 
