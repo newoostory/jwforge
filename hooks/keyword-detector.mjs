@@ -13,7 +13,7 @@
  * Created BEFORE the AI even starts processing the message.
  */
 
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, unlinkSync } from 'fs';
 import { join } from 'path';
 
 function readStdin() {
@@ -83,7 +83,6 @@ function createPipelineLock(cwd, pipeline, userMessage) {
 function removePipelineLock(cwd) {
   const lockFile = join(cwd, '.jwforge', 'current', 'pipeline-required.json');
   if (existsSync(lockFile)) {
-    const { unlinkSync } = require('fs');
     try { unlinkSync(lockFile); } catch { /* ignore */ }
   }
 }

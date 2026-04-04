@@ -92,7 +92,8 @@ function detectNotification(oldState, newState) {
 
   // User input waiting: step explicitly signals a question or interview interaction
   if (step.includes('question') || step.includes('interview') || step.includes('waiting')) {
-    return { title: 'JWForge: Input Needed', body: 'Phase 1 — awaiting your response.' };
+    const phaseName = PHASE_NAMES[newState.phase] || `Phase ${newState.phase}`;
+    return { title: 'JWForge: Input Needed', body: `${phaseName} — awaiting your response.` };
   }
 
   // Phase 1 just started for the first time (no prior state)
