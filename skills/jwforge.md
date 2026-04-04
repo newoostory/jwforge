@@ -34,8 +34,8 @@ When the user invokes `/deep <task description>`, you take that task and drive i
 
 The team is created AFTER Phase 1 completes (M/L/XL complexity only). S complexity does not use teams.
 
-**Team members (persistent):** Conductor (team leader), Architect (opus), Reviewer (opus)
-**Subagents (ephemeral, regular Agent tool):** Executor, Analyzer, Tester, Fixer
+**Team members (persistent):** Conductor (team leader), Architect (opus)
+**Subagents (ephemeral, regular Agent tool):** Reviewer (Phase 1/2/4, opus), Executor, Analyzer, Tester, Fixer
 
 ```
 Phase 1 complete (task-spec.md written)
@@ -44,10 +44,12 @@ Phase 1 complete (task-spec.md written)
 TeamCreate("jwforge-{task-slug}")
     +-- Conductor (team leader) -- orchestrates all phases
     +-- Architect teammate (opus) -- design + redesign, lives until pipeline ends
-    +-- Reviewer teammate (opus)  -- code review, lives until pipeline ends
     |
+Phase 1: Reviewer subagent (opus) -- spawned via Agent tool (gap review)
+Phase 2: Reviewer subagent (opus) -- spawned via Agent tool (architecture compliance)
 Phase 3: Executor subagents (level by level, sonnet/opus) -- spawned via Agent tool
 Phase 4: Analyzer subagents (per file, sonnet) -- spawned via Agent tool
+         Reviewer subagent (opus) -- spawned via Agent tool (code quality review)
          Tester subagent (sonnet) -- spawned via Agent tool
          Fixer subagents (as needed, sonnet/opus) -- spawned via Agent tool
     |
@@ -55,7 +57,7 @@ Phase 4: Analyzer subagents (per file, sonnet) -- spawned via Agent tool
 TeamDelete (after Phase 4 or on pipeline stop)
 ```
 
-**Team communication:** Conductor ↔ Architect/Reviewer via SendMessage. Executor/Analyzer/Tester/Fixer are regular Agent subagents that return results directly.
+**Team communication:** Conductor ↔ Architect via SendMessage. Reviewer/Executor/Analyzer/Tester/Fixer are regular Agent subagents that return results directly.
 
 ---
 
@@ -241,6 +243,29 @@ All of the following must be satisfied to proceed:
 - Fill unmet items with reasonable defaults
 - Display defaults to user once: "Proceeding with these assumptions: ..."
 
+### Step 1-5b: Phase 1 Reviewer Subagent (M/L/XL only)
+
+**S complexity:** Skip this step entirely.
+
+After the completion check passes, BEFORE generating task-spec.md, spawn a Reviewer subagent to verify interview completeness.
+
+```
+Read agents/reviewer.md -> extract the "Phase 1: Interview Gap Review" section
+Agent(
+  model="opus",
+  name="reviewer-phase1",
+  prompt=<Phase 1 section from agents/reviewer.md
+    + all interview question-answer pairs
+    + current confidence checklist>
+)
+```
+
+**Branching on verdict:**
+- `gaps_found`: Feed the identified gaps back into the questioning loop. Return to Step 1-3 with gap items added as new low-confidence items in the checklist. Then re-run Step 1-4 completion check and Step 1-5b again.
+- `pass`: Proceed to Step 1-5 (task-spec generation).
+
+**Max 2 reviewer rounds.** If the 2nd Reviewer subagent still returns `gaps_found`, proceed to Step 1-5 anyway with remaining gaps noted in the task-spec Assumptions section.
+
 ### Step 1-5: Generate Task Spec
 
 Read the template from `templates/task-spec.md` and fill it with all gathered information.
@@ -292,8 +317,8 @@ Before creating the team, show the user an estimate of agents that will be spawn
 ```
 Complexity: {complexity}
 Estimated agents:
-- Architect (opus): 1 (persistent)
-- Reviewer (opus): 1 (persistent)
+- Architect (opus): 1 (persistent teammate)
+- Reviewer (opus): ~3 (one subagent per Phase 1/2/4)
 - Executors (sonnet/opus): ~{N} (based on expected task count)
 - Analyzers (sonnet): ~{N} (1 per file)
 - Tester (sonnet): 1
@@ -315,15 +340,6 @@ For XL: **wait for user confirmation** before creating the team.
      name="architect",
      team_name="jwforge-{task-slug}",
      prompt=<content of agents/architect.md + task context>
-   )
-   ```
-3. Spawn Reviewer teammate:
-   ```
-   Agent(
-     model="opus",
-     name="reviewer",
-     team_name="jwforge-{task-slug}",
-     prompt=<content of agents/reviewer.md>
    )
    ```
 
@@ -394,6 +410,42 @@ SendMessage(
 
 **For L complexity:** Display architecture summary to user: "Here's the plan: ..." then proceed.
 **For XL complexity:** Display full architecture and **wait for user approval**. If rejected, SendMessage to Architect with feedback.
+
+### Step 2-2b: Phase 2 Reviewer Subagent
+
+After the Architect completes architecture.md, BEFORE proceeding to Phase 3, spawn a Reviewer subagent to verify architecture-spec compliance.
+
+```
+Read agents/reviewer.md -> extract the "Phase 2: Architecture-Spec Compliance Review" section
+Agent(
+  model="opus",
+  name="reviewer-phase2",
+  prompt=<Phase 2 section from agents/reviewer.md
+    + "task-spec.md path: .jwforge/current/task-spec.md"
+    + "architecture.md path: .jwforge/current/architecture.md">
+)
+```
+
+**Branching on verdict:**
+- `reject`: Send the rejection feedback to the Architect teammate for redesign, then spawn a fresh Reviewer subagent to re-check:
+  ```
+  SendMessage(
+    to="architect",
+    message="Architecture rejected by Reviewer. Feedback:
+    {reviewer rejection report with mismatches}
+    Please redesign architecture.md and report back."
+  )
+  // After Architect reports back with redesigned architecture.md:
+  Agent(
+    model="opus",
+    name="reviewer-phase2-recheck",
+    prompt=<Phase 2 section from agents/reviewer.md
+      + task-spec.md path + architecture.md path>
+  )
+  ```
+- `approve`: Proceed to Phase 3.
+
+**Reviewer-Architect loop: max 2 rounds.** If after 2 rounds of reject -> redesign -> re-review the Reviewer still rejects, escalate to the user: display the unresolved mismatches and ask the user to decide.
 
 Update state.json: `phase2.status: "done"`, `phase: 3`, `step: "3-1"`
 
@@ -557,9 +609,9 @@ Conductor prepares from Phase 3 results:
 | Complexity | Analyzer | Test Scope | Code Review |
 |-----------|----------|-----------|-------------|
 | S | Skip | Basic functionality | Skip (task-spec based only) |
-| M | sonnet x N | Functionality + edge cases | Reviewer (already in team) |
-| L | sonnet x N | Functionality + integration | Reviewer (already in team) |
-| XL | sonnet x N | Functionality + integration + boundaries | Reviewer (already in team) |
+| M | sonnet x N | Functionality + edge cases | Reviewer subagent (opus) |
+| L | sonnet x N | Functionality + integration | Reviewer subagent (opus) |
+| XL | sonnet x N | Functionality + integration + boundaries | Reviewer subagent (opus) |
 
 Update state.json: `phase4.status: "in_progress"`, `step: "4-2"`
 
@@ -699,27 +751,30 @@ If all pass → proceed to Stage 2.
 
 ---
 
-#### Stage 2: Code Quality Review (Reviewer teammate, opus, reuse)
+#### Stage 2: Code Quality Review (Reviewer subagent, opus)
 
 **Purpose:** Is the code well-written, secure, and maintainable?
 
-The Reviewer teammate is already in the team since Phase 1-6. Send the review request:
+Spawn a Reviewer subagent for code quality review:
 
 ```
-SendMessage(
-  to="reviewer",
-  message="Code Quality Review request (spec compliance already passed):
-  - architecture.md path: .jwforge/current/architecture.md
-  - Spec Review results: all passed
-  - Analyzer reports: {summary}
-  - Test Report: {summary}
-  - Files to review: {list}
-  - Complexity: {complexity}
-
-  Focus ONLY on code quality. Spec compliance is already verified.
-  Report back with verdict."
+Read agents/reviewer.md -> extract the "Phase 4: Implementation Verification Review" section
+Agent(
+  model="opus",
+  name="reviewer-phase4",
+  prompt=<Phase 4 section from agents/reviewer.md
+    + "task-spec.md path: .jwforge/current/task-spec.md"
+    + "architecture.md path: .jwforge/current/architecture.md"
+    + "Spec Review results: all passed"
+    + "Analyzer reports: {summary}"
+    + "Test Report: {summary}"
+    + "Files to review: {list}"
+    + "Complexity: {complexity}"
+    + "Focus ONLY on code quality. Spec compliance is already verified.">
 )
 ```
+
+The Reviewer subagent returns its report directly (no SendMessage needed).
 
 **Reviewer's file reading strategy:**
 - Review Analyzer reports first → only directly read suspicious files
@@ -734,7 +789,7 @@ SendMessage(
 | Pattern consistency (existing codebase conventions) | warning |
 | Performance (obvious bottlenecks, N+1 queries) | warning |
 
-**Reviewer reports via SendMessage:**
+**Reviewer subagent returns:**
 ```markdown
 ## Quality Review Report
 - verdict: pass | fix_required
@@ -780,14 +835,14 @@ Fix needed
   v
 Fixer subagent (sonnet) -> fix -> git commit -> re-run tests
   |
-  +-- All pass -> SendMessage to Reviewer for re-review (if review issue) or Step 4-6
+  +-- All pass -> spawn Reviewer subagent for re-review (if review issue) or Step 4-6
   |
   +-- Still failing
         |
         v
       Fixer subagent (opus, upgraded) -> fix -> git commit -> re-run tests
         |
-        +-- All pass -> re-review or Step 4-6
+        +-- All pass -> spawn Reviewer subagent for re-review or Step 4-6
         |
         +-- Still failing
               |
@@ -795,7 +850,7 @@ Fixer subagent (sonnet) -> fix -> git commit -> re-run tests
             SendMessage to Architect (reuse teammate) for redesign
             -> new Executor subagent -> git commit -> re-run tests
               |
-              +-- Pass -> re-review or Step 4-6
+              +-- Pass -> spawn Reviewer subagent for re-review or Step 4-6
               +-- Fail after 2 more attempts -> STOP Phase 4, report to user
 ```
 
@@ -835,14 +890,14 @@ Fixer subagent (sonnet) -> fix -> git commit -> re-run tests
 ### Step 4-7: Archive + Team Shutdown
 
 After Phase 4 completion:
-1. Send shutdown request to all teammates: `SendMessage(to="*", message={type: "shutdown_request"})`
-2. Call TeamDelete
+1. Send shutdown request to Architect: `SendMessage(to="architect", message={type: "shutdown_request"})`
+2. Call TeamDelete (only Architect is in the team; Reviewer subagents have already terminated)
 3. Move `.jwforge/current/*` -> `.jwforge/archive/{YYYYMMDD-HHmmss}-{task-name-slug}/`
 4. Display final report to user
 5. Pipeline complete
 
 **If Phase 4 stopped (unfixable):**
-- Send shutdown request + TeamDelete
+- Send shutdown request to Architect + TeamDelete
 - Do NOT archive -- keep in `.jwforge/current/` for manual resolution
 - Tell user the last good git commit hash
 - User can fix manually then re-run `/deep` to continue
@@ -921,4 +976,4 @@ When `/deep` is invoked and `.jwforge/current/state.json` exists:
 | Phase 3 stopped | Check `completed_levels` -> resume from first incomplete level |
 | Phase 4 stopped | Check last git commit -> resume from test/review stage |
 
-**Team resume:** When resuming Phase 2+, recreate the team (TeamCreate + Architect + Reviewer) since previous team was lost with the session. Teammates start fresh but state is recovered from files (task-spec.md, architecture.md, state.json).
+**Team resume:** When resuming Phase 2+, recreate the team (TeamCreate + Architect) since previous team was lost with the session. Architect starts fresh but state is recovered from files (task-spec.md, architecture.md, state.json). Reviewer is a subagent and does not need to be recreated in the team.
