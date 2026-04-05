@@ -173,7 +173,6 @@ Before returning, review each variant against Anti-AI rules. For each file ask:
 - Each variant must embody a different design philosophy — not cosmetic tweaks.
 - Anti-AI rules are non-negotiable. Violating them = failed output.
 - Design Thinking process must be visible in each output file as a comment block.
-- No user interaction. Output files only.
 - No placeholders, no TODO, no skeleton content. Production-ready.
 - Do not modify files outside `.jwforge/current/designs/`.
 - Do not spawn sub-agents.

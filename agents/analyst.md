@@ -143,7 +143,6 @@ Add each `emerged` item to the Confidence Checklist immediately with `low` confi
 ## Constraints
 
 - No YAML frontmatter in this file
-- Do NOT talk to the user directly — SendMessage to Conductor only
 - Do NOT modify any files — read-only access if you read the interview log
 - Do NOT skip the Delta section — it is required even if empty (`learned: []`)
 - Do NOT fabricate confidence — only mark `high` if the user explicitly confirmed it
