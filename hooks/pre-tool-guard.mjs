@@ -107,6 +107,27 @@ async function main() {
       return;
     }
 
+    // === RULE 0b: /selfdeep pipeline guards ===
+    // Selfdeep uses step/steps instead of phase. Block writes during analysis/research/plan steps.
+    if (state.pipeline === 'selfdeep') {
+      const readOnlySteps = ['sandbox', 'analyze', 'research', 'plan'];
+      // 'loop-iterate' step (loop mode): same write model as 'improve' — sandbox-only writes.
+      // Not in readOnlySteps, so it falls through to the allow-all below.
+      // The iterator agent's own constraints enforce sandbox-only writes.
+      if (readOnlySteps.includes(state.step)) {
+        console.log(JSON.stringify({
+          decision: 'block',
+          reason: `[JWForge Guard] BLOCKED: Cannot edit project files during SelfDeep step "${state.step}". Only the "improve" step (in sandbox) and "apply" step (with user approval) allow file modifications.`
+        }));
+        return;
+      }
+      // During 'improve' step, only sandbox path is writable — but that's enforced by the
+      // Improver agent's own constraints, not this hook (hook sees absolute paths).
+      // During 'apply' step, writes to project files are allowed.
+      console.log(JSON.stringify({ continue: true, suppressOutput: true }));
+      return;
+    }
+
     // === RULE 1: /deep Phase 1-2 → BLOCK project file edits ===
     // Design must be complete before any code is written
     if (state.phase <= 2 && state.complexity !== 'S') {

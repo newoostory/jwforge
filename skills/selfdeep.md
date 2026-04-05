@@ -3,7 +3,7 @@ name: selfdeep
 description: "JWForge SelfDeep - Self-improvement pipeline that analyzes JWForge's own usage patterns, researches best practices, applies improvements in a sandbox, and optionally merges them back."
 trigger: "/selfdeep"
 user-invocable: true
-argument-hint: [focus area]
+argument-hint: [focus area] [--loop [N|Nh|Nm]]
 ---
 
 # JWForge SelfDeep Conductor
@@ -12,6 +12,9 @@ You ARE the Conductor for the SelfDeep pipeline — a self-improvement cycle for
 
 When the user invokes `/selfdeep [focus]`, drive the pipeline through 7+1 steps:
 **Step 1 (Sandbox) -> Step 2 (Analyze) + Step 3 (Research) [parallel] -> Step 4 (Plan) -> Step 5 (Improve) -> Step 6 (Verify) -> Step 7 (Report) -> Step 8 (User Decision)**
+
+When the user invokes `/selfdeep [focus] --loop [N|Nh|Nm]`, the single-run flow is bypassed. Instead, **Loop Mode** runs iterative improvement cycles:
+**Step L0 (Parse) -> Step L1 (Sandbox) -> Step L2 (Iterate via selfdeep-iterator) -> Step L3 (Report) -> Step L4 (User Decision)**
 
 No teams. No TeamCreate. All agents are regular subagents spawned via the Agent tool.
 
@@ -62,6 +65,317 @@ No teams. No TeamCreate. All agents are regular subagents spawned via the Agent 
   }
 }
 ```
+
+---
+
+## Loop Mode (`--loop`)
+
+When the user's arguments contain `--loop`, the entire single-run flow (Steps 1-8) is **bypassed**. Loop Mode takes over and runs iterative self-improvement cycles using the `selfdeep-iterator` agent.
+
+**Detection:** Parse the ARGUMENTS string passed to the skill. Check for the `--loop` substring. Also check if the keyword-detector injected a `[SELFDEEP_LOOP] loop_arg=<value|null>` message. If either is present, enter Loop Mode. Otherwise, continue to Step 1 (single-run flow).
+
+---
+
+### Step L0: Parse Termination Condition
+
+Parse the value following `--loop` (from the ARGUMENTS string or the keyword-detector's `loop_arg`):
+
+| Value | Termination Type | Behavior |
+|-------|-----------------|----------|
+| Numeric only (e.g., `5`) | `count` | Stop after N iterations |
+| Time pattern (e.g., `2h`, `30m`, `8h`) | `time` | Stop after duration from now |
+| Empty / missing / `null` | `auto` | Stop on consecutive zero-improvement iterations (threshold: `loop_max_zero_improvement_streak` from config, default 2) |
+
+**Hard caps are always enforced** regardless of termination type:
+- `loop_hard_cap_iterations` from config (default 50)
+- `loop_hard_cap_hours` from config (default 24)
+
+Display to user:
+```
+Loop mode activated. Termination: {type} ({value}). Hard caps: {hard_cap_iterations} iterations / {hard_cap_hours}h.
+```
+
+---
+
+### Step L1: Sandbox Setup
+
+Identical to Step 1 (Sandbox Setup) in the single-run flow. Create the sandbox **once** — it is reused across all iterations.
+
+#### L1-1: Clean Previous Sandbox
+
+```bash
+rm -rf ~/.claude/jwforge-sandbox/
+```
+
+#### L1-2: Clone Project to Sandbox
+
+```bash
+mkdir -p ~/.claude/jwforge-sandbox/
+rsync -a --exclude='.git/' --exclude='node_modules/' --exclude='.jwforge/current/' <project_root>/ ~/.claude/jwforge-sandbox/
+```
+
+#### L1-3: Validate Sandbox
+
+Confirm the sandbox contains the expected project structure:
+- `agents/` directory exists
+- `skills/` directory exists
+- `hooks/` directory exists (if present in project)
+- `CLAUDE.md` exists
+
+If validation fails, report error and stop pipeline.
+
+#### L1-4: Write Loop State
+
+Write initial state.json with the full loop object:
+
+```json
+{
+  "pipeline": "selfdeep",
+  "task": "self-improvement",
+  "focus": "<focus or null>",
+  "step": "loop-iterate",
+  "status": "in_progress",
+  "run_id": "selfdeep-<YYYYMMDD-HHmmss>",
+  "sandbox_path": "~/.claude/jwforge-sandbox/",
+  "verification_passed": null,
+  "steps": { "sandbox": "done", "loop": "in_progress", "report": "pending", "apply": "pending" },
+  "loop": {
+    "enabled": true,
+    "termination_type": "count | time | auto",
+    "termination_value": "<parsed value>",
+    "hard_cap_iterations": 50,
+    "hard_cap_hours": 24,
+    "cooldown_minutes": 20,
+    "started_at": "<ISO timestamp>",
+    "current_iteration": 0,
+    "resume_after": null,
+    "iterations": [],
+    "total_improvements": 0,
+    "zero_improvement_streak": 0,
+    "stopped_reason": null
+  }
+}
+```
+
+---
+
+### Step L2: Iteration Loop
+
+The core loop. Each iteration executes the following sub-steps:
+
+#### L2-1: Check Termination
+
+Evaluate termination conditions in order. If any trigger, go to **Step L3**.
+
+| Mode | Condition |
+|------|-----------|
+| Count | `current_iteration >= termination_value` |
+| Time | `now >= started_at + termination_value` |
+| Auto | `zero_improvement_streak >= loop_max_zero_improvement_streak` (from config) |
+| Hard cap (always) | `current_iteration >= hard_cap_iterations` OR `now >= started_at + hard_cap_hours` |
+
+If a hard cap triggers, set `stopped_reason: "hard_cap_iterations"` or `"hard_cap_hours"`.
+
+#### L2-2: Check Cooldown
+
+If `resume_after` is set and `now < resume_after`, calculate exact remaining seconds and sleep:
+
+```bash
+sleep <remaining_seconds>
+```
+
+#### L2-3: Create Iteration Directory
+
+```bash
+mkdir -p .jwforge/current/selfdeep-loops/iteration-{N}/
+mkdir -p .jwforge/current/selfdeep-loops/iteration-{N}/snapshot/
+```
+
+#### L2-4: Spawn selfdeep-iterator Agent
+
+Read the agent prompt from `agents/selfdeep-iterator.md` and spawn a subagent:
+
+```
+Agent(
+  model="opus",
+  mode="bypassPermissions",
+  prompt=<contents of agents/selfdeep-iterator.md> + context:
+    "iteration_number: {N}
+     sandbox_path: ~/.claude/jwforge-sandbox/
+     project_root: <project root>
+     focus: <focus or null>
+     previous_iterations_summary: <array of prior summaries>
+     snapshot_dir: .jwforge/current/selfdeep-loops/iteration-{N}/snapshot/"
+)
+```
+
+#### L2-5: Collect Result
+
+The agent returns a JSON object (≤10 lines):
+```json
+{
+  "status": "done | zero_improvements | rolled_back | failed",
+  "improvements_applied": 0,
+  "summary": "one-line description"
+}
+```
+
+#### L2-6: Write Iteration Summary
+
+Write the agent's summary to `.jwforge/current/selfdeep-loops/iteration-{N}/summary.md`.
+
+#### L2-7: Update state.json
+
+- Increment `loop.current_iteration`
+- Append to `loop.iterations` array:
+  ```json
+  { "n": N, "status": "<status>", "improvements_applied": N, "verification_passed": true|false, "summary": "<summary>" }
+  ```
+- Update `loop.total_improvements` by adding `improvements_applied`
+
+#### L2-8: Handle Result
+
+| Agent Status | Action |
+|-------------|--------|
+| `done` | Reset `zero_improvement_streak` to 0, continue |
+| `zero_improvements` | Increment `zero_improvement_streak`; if streak >= `loop_max_zero_improvement_streak` → set `stopped_reason: "zero_improvements"`, go to **Step L3** |
+| `rolled_back` | Reset `zero_improvement_streak` to 0, continue |
+| Agent crash/error | Log error in summary, increment crash counter; after 3 consecutive crashes → set `stopped_reason: "consecutive_crashes"`, go to **Step L3** |
+
+#### L2-9: Set Cooldown
+
+Calculate: `resume_after = now + cooldown_minutes` (from config, default 20).
+
+Display:
+```
+Iteration {N} complete. {improvements_applied} improvements. Cooling down until {resume_after}.
+```
+
+#### L2-10: Loop Back
+
+Return to **L2-1** (Check Termination).
+
+---
+
+### Step L3: Final Report
+
+1. Update state.json:
+   ```json
+   { "step": "report", "steps": { "loop": "done", "report": "in_progress" } }
+   ```
+
+2. Display loop summary to the user:
+   ```
+   ## Loop Complete
+   
+   Total iterations: {current_iteration}
+   Total improvements: {total_improvements}
+   Stopped reason: {stopped_reason}
+   ```
+
+3. Spawn the `selfdeep-reporter` agent with ALL iteration summaries merged:
+
+   ```
+   Read agents/selfdeep-reporter.md
+   Agent(
+     model="sonnet",
+     prompt=<contents of agents/selfdeep-reporter.md> + the following data:
+   
+     "pipeline_run_id: <run_id from state>
+      report_title: 'SelfDeep Loop Run — <focus or 'General'>'
+      report_date: <today's ISO date>
+      overall_status: <'passed' if total_improvements > 0, 'partial' if some rolled back, 'failed' if all zero>
+      mode: loop
+   
+      iteration_count: {current_iteration}
+      total_improvements: {total_improvements}
+      stopped_reason: {stopped_reason}
+   
+      iterations: <full loop.iterations array with per-iteration breakdown>
+   
+      apply_instructions: <see below>
+      apply_command: '적용해'
+      skip_instructions: <see below>
+   
+      Template path: templates/selfdeep-report.md (read it yourself)"
+   )
+   ```
+
+   The report should show per-iteration breakdown + aggregate stats.
+
+4. Update state.json:
+   ```json
+   { "step": "apply", "steps": { "report": "done", "apply": "in_progress" } }
+   ```
+
+**apply_instructions** (if `total_improvements > 0`):
+```
+Review the changes listed above. Type "적용해" to apply all accumulated sandbox changes to the original project. Conflicts will be flagged for manual resolution.
+```
+
+**apply_instructions** (if `total_improvements == 0`):
+```
+No improvements were applied across all iterations. Changes cannot be applied. Review the report for details.
+```
+
+**skip_instructions:**
+```
+Type "적용하지마" to discard all changes and delete the sandbox. The report above is your reference for manual improvements.
+```
+
+---
+
+### Step L4: User Decision
+
+Same as Step 8 in the single-run flow, but with loop-specific messaging.
+
+Display the decision prompt:
+
+```
+---
+
+### What would you like to do?
+
+Loop completed: {current_iteration} iterations, {total_improvements} total improvements.
+
+{If total_improvements > 0:}
+- **적용해** — Apply all accumulated sandbox improvements to the original project (diff-based merge with conflict detection)
+- **적용하지마** — Discard all changes and delete the sandbox
+
+{If total_improvements == 0:}
+- No improvements were applied. Type anything to discard the sandbox and end the pipeline.
+```
+
+Wait for user response.
+
+#### L4-A: "적용해" (Apply)
+
+**Only available if `total_improvements > 0`.**
+
+Follow the same conflict detection and apply logic as Step 8-A:
+
+1. For each file modified in the sandbox, compare with the current original project version.
+2. Apply clean diffs directly. Flag conflicts for user resolution.
+3. After applying:
+   - Display summary of applied changes.
+   - Delete the sandbox: `rm -rf ~/.claude/jwforge-sandbox/`
+   - Clean up state: delete `.jwforge/current/state.json`
+   - Delete loop artifacts: `rm -rf .jwforge/current/selfdeep-loops/`
+   - Suggest: "Changes applied. Run `/verify` to confirm everything works, or `/commit` to commit the improvements."
+
+#### L4-B: "적용하지마" (Discard)
+
+1. Delete the sandbox: `rm -rf ~/.claude/jwforge-sandbox/`
+2. Clean up state: delete `.jwforge/current/state.json`
+3. Delete loop artifacts: `rm -rf .jwforge/current/selfdeep-loops/`
+4. Display: "Sandbox discarded. The report above is your reference for manual improvements."
+
+#### L4-C: No Improvements (any input)
+
+1. Delete the sandbox: `rm -rf ~/.claude/jwforge-sandbox/`
+2. Clean up state: delete `.jwforge/current/state.json`
+3. Delete loop artifacts: `rm -rf .jwforge/current/selfdeep-loops/`
+4. Display: "Pipeline complete. Review the report for details on what was attempted."
 
 ---
 
@@ -541,4 +855,33 @@ Step 8 (User Decision)
     |                     |
     v                     v
   Apply + Cleanup       Discard + Cleanup
+```
+
+### Loop Mode State Transitions
+
+```
+Step 0 (Init)
+    |
+    +-- --loop detected? --YES--> Step L0 (Parse Termination)
+    |                                  |
+    NO                                 v
+    |                             Step L1 (Sandbox Setup) ----fail----> STOP
+    v                                  |
+Step 1 (Single-run flow)               v
+                                  Step L2 (Iteration Loop) <--+
+                                       |                      |
+                                       +-- terminate? --NO----+
+                                       |                (cooldown + next iteration)
+                                      YES
+                                       |
+                                       v
+                                  Step L3 (Final Report)
+                                       |
+                                       v
+                                  Step L4 (User Decision)
+                                       |                     |
+                                     적용해               적용하지마 / no improvements
+                                       |                     |
+                                       v                     v
+                                  Apply + Cleanup       Discard + Cleanup
 ```
