@@ -13,22 +13,9 @@
  * Created BEFORE the AI even starts processing the message.
  */
 
-import { readFileSync, writeFileSync, existsSync, mkdirSync, unlinkSync } from 'fs';
+import { writeFileSync, existsSync, mkdirSync, unlinkSync } from 'fs';
 import { join } from 'path';
-
-function readStdin() {
-  return new Promise((resolve) => {
-    const chunks = [];
-    let settled = false;
-    const timeout = setTimeout(() => {
-      if (!settled) { settled = true; process.stdin.removeAllListeners(); resolve(Buffer.concat(chunks).toString('utf-8')); }
-    }, 2000);
-    process.stdin.on('data', (chunk) => chunks.push(chunk));
-    process.stdin.on('end', () => { if (!settled) { settled = true; clearTimeout(timeout); resolve(Buffer.concat(chunks).toString('utf-8')); } });
-    process.stdin.on('error', () => { if (!settled) { settled = true; clearTimeout(timeout); resolve(''); } });
-    if (process.stdin.readableEnded) { if (!settled) { settled = true; clearTimeout(timeout); resolve(Buffer.concat(chunks).toString('utf-8')); } }
-  });
-}
+import { readStdin, getCwd, ALLOW, ALLOW_MSG } from './lib/common.mjs';
 
 const KEYWORDS = [
   // Cancel / stop
@@ -93,20 +80,20 @@ async function main() {
   try {
     const raw = await readStdin();
     if (!raw.trim()) {
-      console.log(JSON.stringify({ continue: true, suppressOutput: true }));
+      console.log(ALLOW);
       return;
     }
 
     let data;
-    try { data = JSON.parse(raw); } catch { console.log(JSON.stringify({ continue: true, suppressOutput: true })); return; }
+    try { data = JSON.parse(raw); } catch { console.log(ALLOW); return; }
 
     const userMessage = (data.message || data.content || data.prompt || '').toLowerCase().trim();
     if (!userMessage) {
-      console.log(JSON.stringify({ continue: true, suppressOutput: true }));
+      console.log(ALLOW);
       return;
     }
 
-    const cwd = process.env.CLAUDE_CWD || process.cwd();
+    const cwd = getCwd();
 
     // Check for keyword matches
     // Uses word-boundary regex for keywords that could be substrings of others
@@ -124,7 +111,7 @@ async function main() {
       .sort((a, b) => a.priority - b.priority);
 
     if (matches.length === 0) {
-      console.log(JSON.stringify({ continue: true, suppressOutput: true }));
+      console.log(ALLOW);
       return;
     }
 
@@ -133,32 +120,26 @@ async function main() {
     // Cancel: remove lock
     if (match.skill === 'cancel') {
       removePipelineLock(cwd);
-      console.log(JSON.stringify({ continue: true, suppressOutput: true }));
+      console.log(ALLOW);
       return;
     }
 
     // Pipeline trigger: CREATE LOCK FILE
     if (match.pipeline) {
       createPipelineLock(cwd, match.pipeline, userMessage);
-      console.log(JSON.stringify({
-        continue: true,
-        message: `[JWForge] Pipeline lock created for /${match.pipeline}. All file modifications are blocked until state.json is properly initialized through the pipeline protocol.`
-      }));
+      console.log(ALLOW_MSG(`[JWForge] Pipeline lock created for /${match.pipeline}. All file modifications are blocked until state.json is properly initialized through the pipeline protocol.`));
       return;
     }
 
     // Mode injection
     if (match.mode && MODE_MESSAGES[match.mode]) {
-      console.log(JSON.stringify({
-        continue: true,
-        message: MODE_MESSAGES[match.mode]
-      }));
+      console.log(ALLOW_MSG(MODE_MESSAGES[match.mode]));
       return;
     }
 
-    console.log(JSON.stringify({ continue: true, suppressOutput: true }));
+    console.log(ALLOW);
   } catch {
-    console.log(JSON.stringify({ continue: true, suppressOutput: true }));
+    console.log(ALLOW);
   }
 }
 

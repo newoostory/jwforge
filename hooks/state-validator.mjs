@@ -13,67 +13,44 @@
  * Only triggers when writing to state.json. Other files pass through.
  */
 
-import { readFileSync, existsSync } from 'fs';
+import { existsSync } from 'fs';
 import { join, basename } from 'path';
-
-function readStdin() {
-  return new Promise((resolve) => {
-    const chunks = [];
-    let settled = false;
-    const timeout = setTimeout(() => {
-      if (!settled) { settled = true; process.stdin.removeAllListeners(); resolve(Buffer.concat(chunks).toString('utf-8')); }
-    }, 2000);
-    process.stdin.on('data', (chunk) => chunks.push(chunk));
-    process.stdin.on('end', () => { if (!settled) { settled = true; clearTimeout(timeout); resolve(Buffer.concat(chunks).toString('utf-8')); } });
-    process.stdin.on('error', () => { if (!settled) { settled = true; clearTimeout(timeout); resolve(''); } });
-    if (process.stdin.readableEnded) { if (!settled) { settled = true; clearTimeout(timeout); resolve(Buffer.concat(chunks).toString('utf-8')); } }
-  });
-}
+import { readStdin, getCwd, readState, ALLOW, BLOCK, JWFORGE_DIR } from './lib/common.mjs';
 
 async function main() {
   try {
     const raw = await readStdin();
-    if (!raw.trim()) { console.log(JSON.stringify({ continue: true, suppressOutput: true })); return; }
+    if (!raw.trim()) { console.log(ALLOW); return; }
 
     let data;
-    try { data = JSON.parse(raw); } catch { console.log(JSON.stringify({ continue: true, suppressOutput: true })); return; }
+    try { data = JSON.parse(raw); } catch { console.log(ALLOW); return; }
 
     const filePath = data.file_path || data.filePath || data.input?.file_path || '';
-    if (!filePath) { console.log(JSON.stringify({ continue: true, suppressOutput: true })); return; }
+    if (!filePath) { console.log(ALLOW); return; }
 
     // Only validate state.json writes
     if (basename(filePath) !== 'state.json' || !filePath.includes('.jwforge')) {
-      console.log(JSON.stringify({ continue: true, suppressOutput: true }));
+      console.log(ALLOW);
       return;
     }
 
-    const cwd = process.env.CLAUDE_CWD || process.cwd();
-    const stateDir = join(cwd, '.jwforge', 'current');
-    const currentStateFile = join(stateDir, 'state.json');
+    const cwd = getCwd();
+    const stateDir = join(cwd, JWFORGE_DIR, 'current');
 
     // If state.json doesn't exist yet, this is initial creation — allow
-    if (!existsSync(currentStateFile)) {
-      console.log(JSON.stringify({ continue: true, suppressOutput: true }));
-      return;
-    }
-
-    // Read current state
-    let currentState;
-    try { currentState = JSON.parse(readFileSync(currentStateFile, 'utf8')); } catch {
-      console.log(JSON.stringify({ continue: true, suppressOutput: true }));
+    const currentState = readState(cwd);
+    if (!currentState) {
+      console.log(ALLOW);
       return;
     }
 
     // Parse the new content being written
     const newContent = data.content || data.input?.content || '';
-    if (!newContent) { console.log(JSON.stringify({ continue: true, suppressOutput: true })); return; }
+    if (!newContent) { console.log(ALLOW); return; }
 
     let newState;
     try { newState = JSON.parse(newContent); } catch {
-      console.log(JSON.stringify({
-        decision: 'block',
-        reason: `[JWForge State Validator] BLOCKED: Invalid JSON in state.json write. State file must be valid JSON.`
-      }));
+      console.log(BLOCK(`[JWForge State Validator] BLOCKED: Invalid JSON in state.json write. State file must be valid JSON.`));
       return;
     }
 
@@ -82,19 +59,13 @@ async function main() {
 
     // === RULE 1: No phase skipping (max +1 advance) ===
     if (newPhase > oldPhase + 1) {
-      console.log(JSON.stringify({
-        decision: 'block',
-        reason: `[JWForge State Validator] BLOCKED: Illegal phase skip from Phase ${oldPhase} to Phase ${newPhase}. Phases must advance by 1. Complete Phase ${oldPhase} first.`
-      }));
+      console.log(BLOCK(`[JWForge State Validator] BLOCKED: Illegal phase skip from Phase ${oldPhase} to Phase ${newPhase}. Phases must advance by 1. Complete Phase ${oldPhase} first.`));
       return;
     }
 
     // === RULE 2: No going backwards ===
     if (newPhase < oldPhase && currentState.status === 'in_progress') {
-      console.log(JSON.stringify({
-        decision: 'block',
-        reason: `[JWForge State Validator] BLOCKED: Illegal phase regression from Phase ${oldPhase} to Phase ${newPhase}. Phases cannot go backwards during active pipeline.`
-      }));
+      console.log(BLOCK(`[JWForge State Validator] BLOCKED: Illegal phase regression from Phase ${oldPhase} to Phase ${newPhase}. Phases cannot go backwards during active pipeline.`));
       return;
     }
 
@@ -104,10 +75,7 @@ async function main() {
       if (oldPhase === 1 && newPhase === 2) {
         const taskSpec = join(stateDir, 'task-spec.md');
         if (!existsSync(taskSpec)) {
-          console.log(JSON.stringify({
-            decision: 'block',
-            reason: `[JWForge State Validator] BLOCKED: Cannot advance to Phase 2 without task-spec.md. Complete Phase 1 (Deep Interview) first.`
-          }));
+          console.log(BLOCK(`[JWForge State Validator] BLOCKED: Cannot advance to Phase 2 without task-spec.md. Complete Phase 1 (Deep Interview) first.`));
           return;
         }
       }
@@ -117,10 +85,7 @@ async function main() {
         const arch = join(stateDir, 'architecture.md');
         const complexity = newState.complexity || currentState.complexity;
         if (complexity !== 'S' && !existsSync(arch)) {
-          console.log(JSON.stringify({
-            decision: 'block',
-            reason: `[JWForge State Validator] BLOCKED: Cannot advance to Phase 3 without architecture.md (complexity: ${complexity}). Complete Phase 2 (Architecture) first.`
-          }));
+          console.log(BLOCK(`[JWForge State Validator] BLOCKED: Cannot advance to Phase 3 without architecture.md (complexity: ${complexity}). Complete Phase 2 (Architecture) first.`));
           return;
         }
       }
@@ -129,18 +94,12 @@ async function main() {
       if (oldPhase === 1 && newPhase === 3) {
         const complexity = newState.complexity || currentState.complexity;
         if (complexity !== 'S') {
-          console.log(JSON.stringify({
-            decision: 'block',
-            reason: `[JWForge State Validator] BLOCKED: Only S complexity can skip Phase 2. Current complexity: ${complexity}. Go through Phase 2 (Architecture) first.`
-          }));
+          console.log(BLOCK(`[JWForge State Validator] BLOCKED: Only S complexity can skip Phase 2. Current complexity: ${complexity}. Go through Phase 2 (Architecture) first.`));
           return;
         }
         const taskSpec = join(stateDir, 'task-spec.md');
         if (!existsSync(taskSpec)) {
-          console.log(JSON.stringify({
-            decision: 'block',
-            reason: `[JWForge State Validator] BLOCKED: Cannot advance to Phase 3 without task-spec.md, even for S complexity.`
-          }));
+          console.log(BLOCK(`[JWForge State Validator] BLOCKED: Cannot advance to Phase 3 without task-spec.md, even for S complexity.`));
           return;
         }
       }
@@ -158,10 +117,7 @@ async function main() {
       };
       const allowed = legalTransitions[oldStatus] || [];
       if (!allowed.includes(newStatus)) {
-        console.log(JSON.stringify({
-          decision: 'block',
-          reason: `[JWForge State Validator] BLOCKED: Illegal status transition from "${oldStatus}" to "${newStatus}". Pipeline status "${oldStatus}" cannot transition to "${newStatus}".`
-        }));
+        console.log(BLOCK(`[JWForge State Validator] BLOCKED: Illegal status transition from "${oldStatus}" to "${newStatus}". Pipeline status "${oldStatus}" cannot transition to "${newStatus}".`));
         return;
       }
     }
@@ -171,10 +127,7 @@ async function main() {
       const pipeline = newState.pipeline || currentState.pipeline;
       const complexity = newState.complexity || currentState.complexity;
       if (pipeline === 'deeptk' && complexity === 'S') {
-        console.log(JSON.stringify({
-          decision: 'block',
-          reason: `[JWForge State Validator] BLOCKED: deeptk pipeline does not support S complexity. S tasks must use /deep instead. Cannot advance beyond Phase 1 with S complexity in deeptk.`
-        }));
+        console.log(BLOCK(`[JWForge State Validator] BLOCKED: deeptk pipeline does not support S complexity. S tasks must use /deep instead. Cannot advance beyond Phase 1 with S complexity in deeptk.`));
         return;
       }
     }
@@ -182,10 +135,7 @@ async function main() {
     // === RULE 5: Complexity/type immutability after classification ===
     if (currentState.complexity && newState.complexity && currentState.complexity !== newState.complexity) {
       if (oldPhase >= 2) {
-        console.log(JSON.stringify({
-          decision: 'block',
-          reason: `[JWForge State Validator] BLOCKED: Cannot change complexity from "${currentState.complexity}" to "${newState.complexity}" after Phase 1. Complexity is locked after classification.`
-        }));
+        console.log(BLOCK(`[JWForge State Validator] BLOCKED: Cannot change complexity from "${currentState.complexity}" to "${newState.complexity}" after Phase 1. Complexity is locked after classification.`));
         return;
       }
     }
@@ -195,18 +145,15 @@ async function main() {
       const phaseKey = `phase${oldPhase}`;
       const phaseStatus = currentState[phaseKey]?.status;
       if (phaseStatus && phaseStatus !== 'done' && phaseStatus !== 'skipped') {
-        console.log(JSON.stringify({
-          decision: 'block',
-          reason: `[JWForge State Validator] BLOCKED: Phase ${oldPhase} status is "${phaseStatus}", not "done". Complete the current phase before advancing.`
-        }));
+        console.log(BLOCK(`[JWForge State Validator] BLOCKED: Phase ${oldPhase} status is "${phaseStatus}", not "done". Complete the current phase before advancing.`));
         return;
       }
     }
 
-    console.log(JSON.stringify({ continue: true, suppressOutput: true }));
+    console.log(ALLOW);
   } catch {
     // Validator failure should not block — fail open
-    console.log(JSON.stringify({ continue: true, suppressOutput: true }));
+    console.log(ALLOW);
   }
 }
 

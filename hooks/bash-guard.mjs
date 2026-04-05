@@ -15,20 +15,7 @@
 
 import { readFileSync, existsSync } from 'fs';
 import { join, basename } from 'path';
-
-function readStdin() {
-  return new Promise((resolve) => {
-    const chunks = [];
-    let settled = false;
-    const timeout = setTimeout(() => {
-      if (!settled) { settled = true; process.stdin.removeAllListeners(); resolve(Buffer.concat(chunks).toString('utf-8')); }
-    }, 2000);
-    process.stdin.on('data', (chunk) => chunks.push(chunk));
-    process.stdin.on('end', () => { if (!settled) { settled = true; clearTimeout(timeout); resolve(Buffer.concat(chunks).toString('utf-8')); } });
-    process.stdin.on('error', () => { if (!settled) { settled = true; clearTimeout(timeout); resolve(''); } });
-    if (process.stdin.readableEnded) { if (!settled) { settled = true; clearTimeout(timeout); resolve(Buffer.concat(chunks).toString('utf-8')); } }
-  });
-}
+import { readStdin, readState, getCwd, checkPipelineLock, ALLOW, BLOCK, ALLOW_MSG } from './lib/common.mjs';
 
 // Patterns that indicate file-writing Bash commands
 const FILE_WRITE_PATTERNS = [
@@ -79,7 +66,7 @@ const SAFE_PATTERNS = [
 ];
 
 // Paths that are always writable (pipeline artifacts)
-function isWritingToPipelineArtifact(command, cwd) {
+function isWritingToPipelineArtifact(command) {
   const jwforgePatterns = [
     /\.jwforge/,
     /state\.json/,
@@ -92,12 +79,6 @@ function isWritingToPipelineArtifact(command, cwd) {
   return jwforgePatterns.some(p => p.test(command));
 }
 
-function readState(cwd) {
-  const stateFile = join(cwd, '.jwforge', 'current', 'state.json');
-  if (!existsSync(stateFile)) return null;
-  try { return JSON.parse(readFileSync(stateFile, 'utf8')); } catch { return null; }
-}
-
 function isFileWriteCommand(command) {
   // Check if it matches any safe pattern first
   if (SAFE_PATTERNS.some(p => p.test(command))) return false;
@@ -108,29 +89,23 @@ function isFileWriteCommand(command) {
 async function main() {
   try {
     const raw = await readStdin();
-    if (!raw.trim()) { console.log(JSON.stringify({ continue: true, suppressOutput: true })); return; }
+    if (!raw.trim()) { console.log(ALLOW); return; }
 
     let data;
-    try { data = JSON.parse(raw); } catch { console.log(JSON.stringify({ continue: true, suppressOutput: true })); return; }
+    try { data = JSON.parse(raw); } catch { console.log(ALLOW); return; }
 
     const command = data.command || data.input?.command || '';
-    if (!command) { console.log(JSON.stringify({ continue: true, suppressOutput: true })); return; }
+    if (!command) { console.log(ALLOW); return; }
 
-    const cwd = process.env.CLAUDE_CWD || process.cwd();
+    const cwd = getCwd();
 
     // === Pipeline lock check ===
     // If pipeline-required.json exists but state.json doesn't, AI is skipping protocol
-    const lockFile = join(cwd, '.jwforge', 'current', 'pipeline-required.json');
-    const stateFile = join(cwd, '.jwforge', 'current', 'state.json');
-    if (existsSync(lockFile) && !existsSync(stateFile)) {
+    const lockData = checkPipelineLock(cwd);
+    if (lockData) {
       // Only block file-writing commands, not read-only ones
-      if (isFileWriteCommand(command) && !isWritingToPipelineArtifact(command, cwd)) {
-        let lockData = {};
-        try { lockData = JSON.parse(readFileSync(lockFile, 'utf8')); } catch { /* ignore */ }
-        console.log(JSON.stringify({
-          decision: 'block',
-          reason: `[JWForge Bash Guard] BLOCKED: Pipeline /${lockData.pipeline || 'deep'} was triggered but state.json not initialized. Follow the pipeline protocol first. No file modifications until pipeline is properly started.`
-        }));
+      if (isFileWriteCommand(command) && !isWritingToPipelineArtifact(command)) {
+        console.log(BLOCK(`[JWForge Bash Guard] BLOCKED: Pipeline /${lockData.pipeline || 'deep'} was triggered but state.json not initialized. Follow the pipeline protocol first. No file modifications until pipeline is properly started.`));
         return;
       }
     }
@@ -138,28 +113,25 @@ async function main() {
     // No active pipeline and no lock — allow everything
     const state = readState(cwd);
     if (!state || state.status !== 'in_progress') {
-      console.log(JSON.stringify({ continue: true, suppressOutput: true }));
+      console.log(ALLOW);
       return;
     }
 
     // Pipeline artifact writes are always allowed
-    if (isWritingToPipelineArtifact(command, cwd)) {
-      console.log(JSON.stringify({ continue: true, suppressOutput: true }));
+    if (isWritingToPipelineArtifact(command)) {
+      console.log(ALLOW);
       return;
     }
 
     // Check if this is a file-writing command
     if (!isFileWriteCommand(command)) {
-      console.log(JSON.stringify({ continue: true, suppressOutput: true }));
+      console.log(ALLOW);
       return;
     }
 
     // === RULE 1: Phase 1-2 → BLOCK all file-writing Bash commands ===
     if (state.phase <= 2 && state.complexity !== 'S') {
-      console.log(JSON.stringify({
-        decision: 'block',
-        reason: `[JWForge Bash Guard] BLOCKED: File-writing Bash command during Phase ${state.phase} (${state.phase === 1 ? 'Deep Interview' : 'Architecture'}). No code modifications before design is complete. Use Edit/Write tools after Phase 2.`
-      }));
+      console.log(BLOCK(`[JWForge Bash Guard] BLOCKED: File-writing Bash command during Phase ${state.phase} (${state.phase === 1 ? 'Deep Interview' : 'Architecture'}). No code modifications before design is complete. Use Edit/Write tools after Phase 2.`));
       return;
     }
 
@@ -176,10 +148,7 @@ async function main() {
           return !archContent.includes(base) && !archContent.includes(f);
         });
         if (unauthorized.length > 0) {
-          console.log(JSON.stringify({
-            decision: 'block',
-            reason: `[JWForge Bash Guard] BLOCKED: Bash command targets file(s) not in architecture.md: ${unauthorized.join(', ')}. Only files listed in the architecture can be modified during Phase 3.`
-          }));
+          console.log(BLOCK(`[JWForge Bash Guard] BLOCKED: Bash command targets file(s) not in architecture.md: ${unauthorized.join(', ')}. Only files listed in the architecture can be modified during Phase 3.`));
           return;
         }
       }
@@ -188,26 +157,20 @@ async function main() {
     // === RULE 3: Surface bug-fix without root cause ===
     if (state.pipeline === 'surface' && state.type === 'bug-fix') {
       if (!state.root_cause || state.root_cause === '' || state.root_cause === 'unknown') {
-        console.log(JSON.stringify({
-          decision: 'block',
-          reason: `[JWForge Bash Guard] BLOCKED: File-writing Bash command before root cause investigation. Iron Law: NO FIXES WITHOUT ROOT CAUSE.`
-        }));
+        console.log(BLOCK(`[JWForge Bash Guard] BLOCKED: File-writing Bash command before root cause investigation. Iron Law: NO FIXES WITHOUT ROOT CAUSE.`));
         return;
       }
     }
 
     // Phase 4 — warn but allow
     if (state.phase === 4) {
-      console.log(JSON.stringify({
-        continue: true,
-        message: `[JWForge] Phase 4: Bash file operation detected. Ensure this is part of the fix loop.`
-      }));
+      console.log(ALLOW_MSG(`[JWForge] Phase 4: Bash file operation detected. Ensure this is part of the fix loop.`));
       return;
     }
 
-    console.log(JSON.stringify({ continue: true, suppressOutput: true }));
+    console.log(ALLOW);
   } catch {
-    console.log(JSON.stringify({ continue: true, suppressOutput: true }));
+    console.log(ALLOW);
   }
 }
 

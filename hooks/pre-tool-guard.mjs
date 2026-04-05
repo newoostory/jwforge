@@ -19,86 +19,45 @@
  */
 
 import { readFileSync, existsSync } from 'fs';
-import { join, basename, resolve } from 'path';
-
-function readStdin() {
-  return new Promise((resolve) => {
-    const chunks = [];
-    let settled = false;
-    const timeout = setTimeout(() => {
-      if (!settled) { settled = true; process.stdin.removeAllListeners(); resolve(Buffer.concat(chunks).toString('utf-8')); }
-    }, 2000);
-    process.stdin.on('data', (chunk) => chunks.push(chunk));
-    process.stdin.on('end', () => { if (!settled) { settled = true; clearTimeout(timeout); resolve(Buffer.concat(chunks).toString('utf-8')); } });
-    process.stdin.on('error', () => { if (!settled) { settled = true; clearTimeout(timeout); resolve(''); } });
-    if (process.stdin.readableEnded) { if (!settled) { settled = true; clearTimeout(timeout); resolve(Buffer.concat(chunks).toString('utf-8')); } }
-  });
-}
+import { join, basename } from 'path';
+import { readStdin, readState, getCwd, isPipelineArtifact, checkPipelineLock, ALLOW, BLOCK, ALLOW_MSG } from './lib/common.mjs';
 
 const SENSITIVE_PATTERNS = [
   /\.env$/i, /\.env\.\w+$/i, /credentials\.json$/i,
   /secrets?\.\w+$/i, /\.pem$/i, /\.key$/i, /id_rsa/i, /\.aws\/credentials/i,
 ];
 
-// Files that are always writable (pipeline artifacts)
-function isPipelineArtifact(filePath, cwd) {
-  const normalized = filePath.replace(/\\/g, '/');
-  const jwforgeDir = join(cwd, '.jwforge').replace(/\\/g, '/');
-  return normalized.startsWith(jwforgeDir) ||
-         normalized.includes('.jwforge/') ||
-         basename(normalized) === 'state.json' ||
-         basename(normalized) === 'task-spec.md' ||
-         basename(normalized) === 'architecture.md' ||
-         basename(normalized) === 'compact-snapshot.md' ||
-         basename(normalized) === 'agent-log.jsonl';
-}
-
-function readState(cwd) {
-  const stateFile = join(cwd, '.jwforge', 'current', 'state.json');
-  if (!existsSync(stateFile)) return null;
-  try { return JSON.parse(readFileSync(stateFile, 'utf8')); } catch { return null; }
-}
-
 async function main() {
   try {
     const raw = await readStdin();
-    if (!raw.trim()) { console.log(JSON.stringify({ continue: true, suppressOutput: true })); return; }
+    if (!raw.trim()) { console.log(ALLOW); return; }
 
     let data;
-    try { data = JSON.parse(raw); } catch { console.log(JSON.stringify({ continue: true, suppressOutput: true })); return; }
+    try { data = JSON.parse(raw); } catch { console.log(ALLOW); return; }
 
     const filePath = data.file_path || data.filePath || data.input?.file_path || '';
-    if (!filePath) { console.log(JSON.stringify({ continue: true, suppressOutput: true })); return; }
+    if (!filePath) { console.log(ALLOW); return; }
 
     const fileName = basename(filePath);
-    const cwd = process.env.CLAUDE_CWD || process.cwd();
+    const cwd = getCwd();
 
     // === RULE 0: Always block sensitive files ===
     if (SENSITIVE_PATTERNS.some(p => p.test(filePath) || p.test(fileName))) {
-      console.log(JSON.stringify({
-        decision: 'block',
-        reason: `[JWForge Guard] BLOCKED: write to sensitive file "${fileName}". Remove guard manually if intentional.`
-      }));
+      console.log(BLOCK(`[JWForge Guard] BLOCKED: write to sensitive file "${fileName}". Remove guard manually if intentional.`));
       return;
     }
 
     // === Pipeline artifacts are always writable ===
     if (isPipelineArtifact(filePath, cwd)) {
-      console.log(JSON.stringify({ continue: true, suppressOutput: true }));
+      console.log(ALLOW);
       return;
     }
 
     // === RULE 0: Pipeline lock check ===
     // If pipeline-required.json exists but state.json doesn't, the AI is skipping the protocol
-    const lockFile = join(cwd, '.jwforge', 'current', 'pipeline-required.json');
-    const stateFile = join(cwd, '.jwforge', 'current', 'state.json');
-    if (existsSync(lockFile) && !existsSync(stateFile)) {
-      let lockData = {};
-      try { lockData = JSON.parse(readFileSync(lockFile, 'utf8')); } catch { /* ignore */ }
-      console.log(JSON.stringify({
-        decision: 'block',
-        reason: `[JWForge Guard] BLOCKED: Pipeline /${lockData.pipeline || 'deep'} was triggered but state.json has not been initialized. You MUST follow the pipeline protocol: read skills/jwforge.md, create state.json, then proceed through phases. No file modifications allowed until the pipeline is properly started.`
-      }));
+    const lockData = checkPipelineLock(cwd);
+    if (lockData) {
+      console.log(BLOCK(`[JWForge Guard] BLOCKED: Pipeline /${lockData.pipeline || 'deep'} was triggered but state.json has not been initialized. You MUST follow the pipeline protocol: read skills/jwforge.md, create state.json, then proceed through phases. No file modifications allowed until the pipeline is properly started.`));
       return;
     }
 
@@ -107,17 +66,14 @@ async function main() {
 
     if (!state || state.status !== 'in_progress') {
       // No active pipeline and no lock — allow everything
-      console.log(JSON.stringify({ continue: true, suppressOutput: true }));
+      console.log(ALLOW);
       return;
     }
 
     // === RULE 1: /deep Phase 1-2 → BLOCK project file edits ===
     // Design must be complete before any code is written
     if (state.phase <= 2 && state.complexity !== 'S') {
-      console.log(JSON.stringify({
-        decision: 'block',
-        reason: `[JWForge Guard] BLOCKED: Cannot edit project files during Phase ${state.phase} (${state.phase === 1 ? 'Deep Interview' : 'Architecture'}). Complete the design first. No code before design approval.`
-      }));
+      console.log(BLOCK(`[JWForge Guard] BLOCKED: Cannot edit project files during Phase ${state.phase} (${state.phase === 1 ? 'Deep Interview' : 'Architecture'}). Complete the design first. No code before design approval.`));
       return;
     }
 
@@ -130,10 +86,7 @@ async function main() {
         const fileBaseName = basename(normalizedPath);
 
         if (!archContent.includes(fileBaseName) && !archContent.includes(normalizedPath)) {
-          console.log(JSON.stringify({
-            decision: 'block',
-            reason: `[JWForge Guard] BLOCKED: "${fileBaseName}" is NOT in architecture.md. Only files listed in the architecture document can be modified during Phase 3 (Execute). Update architecture.md first if this file needs changes.`
-          }));
+          console.log(BLOCK(`[JWForge Guard] BLOCKED: "${fileBaseName}" is NOT in architecture.md. Only files listed in the architecture document can be modified during Phase 3 (Execute). Update architecture.md first if this file needs changes.`));
           return;
         }
       }
@@ -142,27 +95,21 @@ async function main() {
     // === RULE 3: /surface bug-fix → BLOCK if no root cause established ===
     if (state.pipeline === 'surface' && state.type === 'bug-fix') {
       if (!state.root_cause || state.root_cause === '' || state.root_cause === 'unknown') {
-        console.log(JSON.stringify({
-          decision: 'block',
-          reason: `[JWForge Guard] BLOCKED: Cannot fix code before root cause investigation is complete. Iron Law: NO FIXES WITHOUT ROOT CAUSE. Complete Step 1 (Investigate) first.`
-        }));
+        console.log(BLOCK(`[JWForge Guard] BLOCKED: Cannot fix code before root cause investigation is complete. Iron Law: NO FIXES WITHOUT ROOT CAUSE. Complete Step 1 (Investigate) first.`));
         return;
       }
     }
 
     // === RULE 4: /deep Phase 4 → warn about editing (should be reviewers/fixers only) ===
     if (state.phase === 4) {
-      console.log(JSON.stringify({
-        continue: true,
-        message: `[JWForge] Phase 4 (Verify): editing "${fileName}". Ensure this is part of the fix loop, not new feature work.`
-      }));
+      console.log(ALLOW_MSG(`[JWForge] Phase 4 (Verify): editing "${fileName}". Ensure this is part of the fix loop, not new feature work.`));
       return;
     }
 
-    console.log(JSON.stringify({ continue: true, suppressOutput: true }));
+    console.log(ALLOW);
   } catch {
     // Hook failure should never block the user
-    console.log(JSON.stringify({ continue: true, suppressOutput: true }));
+    console.log(ALLOW);
   }
 }
 

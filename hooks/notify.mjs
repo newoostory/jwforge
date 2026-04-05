@@ -16,20 +16,7 @@
 import { execSync } from 'child_process';
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
 import { join } from 'path';
-
-function readStdin() {
-  return new Promise((resolve) => {
-    const chunks = [];
-    let settled = false;
-    const timeout = setTimeout(() => {
-      if (!settled) { settled = true; process.stdin.removeAllListeners(); resolve(Buffer.concat(chunks).toString('utf-8')); }
-    }, 2000);
-    process.stdin.on('data', (chunk) => chunks.push(chunk));
-    process.stdin.on('end', () => { if (!settled) { settled = true; clearTimeout(timeout); resolve(Buffer.concat(chunks).toString('utf-8')); } });
-    process.stdin.on('error', () => { if (!settled) { settled = true; clearTimeout(timeout); resolve(''); } });
-    if (process.stdin.readableEnded) { if (!settled) { settled = true; clearTimeout(timeout); resolve(Buffer.concat(chunks).toString('utf-8')); } }
-  });
-}
+import { readStdin, getCwd } from './lib/common.mjs';
 
 function sendNotification(title, body) {
   try {
@@ -105,7 +92,7 @@ function detectNotification(oldState, newState) {
 }
 
 async function handleStop(data) {
-  const cwd = process.env.CLAUDE_CWD || process.cwd();
+  const cwd = getCwd();
   const stateFile = join(cwd, '.jwforge', 'current', 'state.json');
 
   if (!existsSync(stateFile)) {
@@ -135,7 +122,7 @@ async function handlePostToolUse(data) {
     return;
   }
 
-  const cwd = process.env.CLAUDE_CWD || process.cwd();
+  const cwd = getCwd();
 
   // Read old state from cache (written on previous invocation)
   const oldState = readCachedState(cwd);

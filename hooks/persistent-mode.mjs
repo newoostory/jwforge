@@ -12,20 +12,7 @@
 
 import { readFileSync, existsSync } from 'fs';
 import { join } from 'path';
-
-function readStdin() {
-  return new Promise((resolve) => {
-    const chunks = [];
-    let settled = false;
-    const timeout = setTimeout(() => {
-      if (!settled) { settled = true; process.stdin.removeAllListeners(); resolve(Buffer.concat(chunks).toString('utf-8')); }
-    }, 2000);
-    process.stdin.on('data', (chunk) => chunks.push(chunk));
-    process.stdin.on('end', () => { if (!settled) { settled = true; clearTimeout(timeout); resolve(Buffer.concat(chunks).toString('utf-8')); } });
-    process.stdin.on('error', () => { if (!settled) { settled = true; clearTimeout(timeout); resolve(''); } });
-    if (process.stdin.readableEnded) { if (!settled) { settled = true; clearTimeout(timeout); resolve(Buffer.concat(chunks).toString('utf-8')); } }
-  });
-}
+import { readStdin, getCwd, ALLOW, BLOCK } from './lib/common.mjs';
 
 function isContextLimitStop(data) {
   const reasons = [data.stop_reason, data.stopReason, data.reason]
@@ -49,15 +36,15 @@ async function main() {
 
     // Never block context limit or user abort stops
     if (isContextLimitStop(data) || isUserAbort(data)) {
-      console.log(JSON.stringify({ continue: true, suppressOutput: true }));
+      console.log(ALLOW);
       return;
     }
 
-    const cwd = process.env.CLAUDE_CWD || process.cwd();
+    const cwd = getCwd();
     const stateFile = join(cwd, '.jwforge', 'current', 'state.json');
 
     if (!existsSync(stateFile)) {
-      console.log(JSON.stringify({ continue: true, suppressOutput: true }));
+      console.log(ALLOW);
       return;
     }
 
@@ -65,7 +52,7 @@ async function main() {
 
     // Only persist if pipeline is actively running
     if (state.status !== 'in_progress') {
-      console.log(JSON.stringify({ continue: true, suppressOutput: true }));
+      console.log(ALLOW);
       return;
     }
 
@@ -83,12 +70,9 @@ async function main() {
     };
     const phaseName = phaseNames[state.phase] || `Phase ${state.phase}`;
 
-    console.log(JSON.stringify({
-      decision: 'block',
-      reason: `[JWForge] Pipeline is active (${phaseName}, step ${state.step}). Work is not complete. Continue from where you left off. Read .jwforge/current/state.json for current state.`
-    }));
+    console.log(BLOCK(`[JWForge] Pipeline is active (${phaseName}, step ${state.step}). Work is not complete. Continue from where you left off. Read .jwforge/current/state.json for current state.`));
   } catch {
-    console.log(JSON.stringify({ continue: true, suppressOutput: true }));
+    console.log(ALLOW);
   }
 }
 

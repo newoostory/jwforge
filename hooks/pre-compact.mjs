@@ -19,35 +19,20 @@
 
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
 import { join } from 'path';
-
-function readStdin() {
-  return new Promise((resolve) => {
-    const chunks = [];
-    let settled = false;
-    const timeout = setTimeout(() => {
-      if (!settled) { settled = true; process.stdin.removeAllListeners(); resolve(Buffer.concat(chunks).toString('utf-8')); }
-    }, 2000);
-    process.stdin.on('data', (chunk) => chunks.push(chunk));
-    process.stdin.on('end', () => { if (!settled) { settled = true; clearTimeout(timeout); resolve(Buffer.concat(chunks).toString('utf-8')); } });
-    process.stdin.on('error', () => { if (!settled) { settled = true; clearTimeout(timeout); resolve(''); } });
-    if (process.stdin.readableEnded) { if (!settled) { settled = true; clearTimeout(timeout); resolve(Buffer.concat(chunks).toString('utf-8')); } }
-  });
-}
+import { readStdin, getCwd, readState, ALLOW, ALLOW_MSG, JWFORGE_DIR } from './lib/common.mjs';
 
 async function main() {
   try {
     await readStdin(); // consume stdin
 
-    const cwd = process.env.CLAUDE_CWD || process.cwd();
-    const stateDir = join(cwd, '.jwforge', 'current');
-    const stateFile = join(stateDir, 'state.json');
+    const cwd = getCwd();
+    const stateDir = join(cwd, JWFORGE_DIR, 'current');
 
-    if (!existsSync(stateFile)) {
-      console.log(JSON.stringify({ continue: true, suppressOutput: true }));
+    const state = readState(cwd);
+    if (!state) {
+      console.log(ALLOW);
       return;
     }
-
-    const state = JSON.parse(readFileSync(stateFile, 'utf8'));
 
     // Build compact snapshot
     const pipeline = state.pipeline || 'deep';
@@ -104,12 +89,9 @@ async function main() {
     writeFileSync(snapshotFile, lines.join('\n'));
 
     // Inject reminder into conversation
-    console.log(JSON.stringify({
-      continue: true,
-      message: `[JWForge] Context compaction detected. Pipeline state saved to .jwforge/current/compact-snapshot.md. After compaction, read this file to restore context.`
-    }));
+    console.log(ALLOW_MSG(`[JWForge] Context compaction detected. Pipeline state saved to .jwforge/current/compact-snapshot.md. After compaction, read this file to restore context.`));
   } catch {
-    console.log(JSON.stringify({ continue: true, suppressOutput: true }));
+    console.log(ALLOW);
   }
 }
 

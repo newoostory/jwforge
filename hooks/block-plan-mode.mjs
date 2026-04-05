@@ -10,40 +10,21 @@
  * - No pipeline active: ALLOW (normal usage)
  */
 
-import { readFileSync, existsSync } from 'fs';
+import { existsSync } from 'fs';
 import { join } from 'path';
-
-function readStdin() {
-  return new Promise((resolve) => {
-    const chunks = [];
-    let settled = false;
-    const timeout = setTimeout(() => {
-      if (!settled) { settled = true; process.stdin.removeAllListeners(); resolve(Buffer.concat(chunks).toString('utf-8')); }
-    }, 2000);
-    process.stdin.on('data', (chunk) => chunks.push(chunk));
-    process.stdin.on('end', () => { if (!settled) { settled = true; clearTimeout(timeout); resolve(Buffer.concat(chunks).toString('utf-8')); } });
-    process.stdin.on('error', () => { if (!settled) { settled = true; clearTimeout(timeout); resolve(''); } });
-    if (process.stdin.readableEnded) { if (!settled) { settled = true; clearTimeout(timeout); resolve(Buffer.concat(chunks).toString('utf-8')); } }
-  });
-}
-
-function readState(cwd) {
-  const stateFile = join(cwd, '.jwforge', 'current', 'state.json');
-  if (!existsSync(stateFile)) return null;
-  try { return JSON.parse(readFileSync(stateFile, 'utf8')); } catch { return null; }
-}
+import { readStdin, readState, getCwd, JWFORGE_DIR, ALLOW, BLOCK, ALLOW_MSG } from './lib/common.mjs';
 
 async function main() {
   try {
     await readStdin();
 
-    const cwd = process.env.CLAUDE_CWD || process.cwd();
-    const lockFile = join(cwd, '.jwforge', 'current', 'pipeline-required.json');
-    const stateFile = join(cwd, '.jwforge', 'current', 'state.json');
+    const cwd = getCwd();
+    const lockFile = join(cwd, JWFORGE_DIR, 'current', 'pipeline-required.json');
+    const stateFile = join(cwd, JWFORGE_DIR, 'current', 'state.json');
 
     // No pipeline active — allow normal Plan Mode usage
     if (!existsSync(lockFile) && !existsSync(stateFile)) {
-      console.log(JSON.stringify({ continue: true, suppressOutput: true }));
+      console.log(ALLOW);
       return;
     }
 
@@ -51,10 +32,7 @@ async function main() {
 
     // Lock exists but no state yet (pipeline just triggered) — block
     if (!state) {
-      console.log(JSON.stringify({
-        decision: 'block',
-        reason: '[JWForge Guard] BLOCKED: Plan Mode not allowed before pipeline initialization. Complete Phase 1 interview in conversation first.'
-      }));
+      console.log(BLOCK('[JWForge Guard] BLOCKED: Plan Mode not allowed before pipeline initialization. Complete Phase 1 interview in conversation first.'));
       return;
     }
 
@@ -64,35 +42,26 @@ async function main() {
     const preExecution = state.phase === 2 || (state.phase === 3 && state.step === '3-1');
 
     if (phase2Done && preExecution) {
-      console.log(JSON.stringify({
-        continue: true,
-        message: '[JWForge] Plan Mode allowed — showing execution plan. Exit Plan Mode before starting execution.'
-      }));
+      console.log(ALLOW_MSG('[JWForge] Plan Mode allowed — showing execution plan. Exit Plan Mode before starting execution.'));
       return;
     }
 
     // Phase 1 — block (interview in conversation)
     if (state.phase === 1) {
-      console.log(JSON.stringify({
-        decision: 'block',
-        reason: '[JWForge Guard] BLOCKED: Plan Mode not allowed during Phase 1 (Interview). Ask questions directly in conversation.'
-      }));
+      console.log(BLOCK('[JWForge Guard] BLOCKED: Plan Mode not allowed during Phase 1 (Interview). Ask questions directly in conversation.'));
       return;
     }
 
     // Phase 3+ active — block (keep bypass permission on)
     if (state.phase >= 3) {
-      console.log(JSON.stringify({
-        decision: 'block',
-        reason: '[JWForge Guard] BLOCKED: Plan Mode not allowed during execution (Phase 3+). Bypass permission must stay on for uninterrupted pipeline.'
-      }));
+      console.log(BLOCK('[JWForge Guard] BLOCKED: Plan Mode not allowed during execution (Phase 3+). Bypass permission must stay on for uninterrupted pipeline.'));
       return;
     }
 
     // Default: allow
-    console.log(JSON.stringify({ continue: true, suppressOutput: true }));
+    console.log(ALLOW);
   } catch {
-    console.log(JSON.stringify({ continue: true, suppressOutput: true }));
+    console.log(ALLOW);
   }
 }
 

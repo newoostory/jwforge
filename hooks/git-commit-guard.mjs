@@ -12,57 +12,32 @@
 
 import { readFileSync, existsSync } from 'fs';
 import { join } from 'path';
-
-function readStdin() {
-  return new Promise((resolve) => {
-    const chunks = [];
-    let settled = false;
-    const timeout = setTimeout(() => {
-      if (!settled) { settled = true; process.stdin.removeAllListeners(); resolve(Buffer.concat(chunks).toString('utf-8')); }
-    }, 2000);
-    process.stdin.on('data', (chunk) => chunks.push(chunk));
-    process.stdin.on('end', () => { if (!settled) { settled = true; clearTimeout(timeout); resolve(Buffer.concat(chunks).toString('utf-8')); } });
-    process.stdin.on('error', () => { if (!settled) { settled = true; clearTimeout(timeout); resolve(''); } });
-    if (process.stdin.readableEnded) { if (!settled) { settled = true; clearTimeout(timeout); resolve(Buffer.concat(chunks).toString('utf-8')); } }
-  });
-}
-
-function readState(cwd) {
-  const stateFile = join(cwd, '.jwforge', 'current', 'state.json');
-  if (!existsSync(stateFile)) return null;
-  try { return JSON.parse(readFileSync(stateFile, 'utf8')); } catch { return null; }
-}
+import { readStdin, readState, getCwd, checkPipelineLock, ALLOW, BLOCK, ALLOW_MSG } from './lib/common.mjs';
 
 async function main() {
   try {
     const raw = await readStdin();
-    if (!raw.trim()) { console.log(JSON.stringify({ continue: true, suppressOutput: true })); return; }
+    if (!raw.trim()) { console.log(ALLOW); return; }
 
     let data;
-    try { data = JSON.parse(raw); } catch { console.log(JSON.stringify({ continue: true, suppressOutput: true })); return; }
+    try { data = JSON.parse(raw); } catch { console.log(ALLOW); return; }
 
     const command = data.command || data.input?.command || '';
-    if (!command) { console.log(JSON.stringify({ continue: true, suppressOutput: true })); return; }
+    if (!command) { console.log(ALLOW); return; }
 
     // Only check git commands
     if (!/\bgit\b/.test(command)) {
-      console.log(JSON.stringify({ continue: true, suppressOutput: true }));
+      console.log(ALLOW);
       return;
     }
 
-    const cwd = process.env.CLAUDE_CWD || process.cwd();
+    const cwd = getCwd();
 
     // === Pipeline lock check ===
-    const lockFile = join(cwd, '.jwforge', 'current', 'pipeline-required.json');
-    const stateFile = join(cwd, '.jwforge', 'current', 'state.json');
-    if (existsSync(lockFile) && !existsSync(stateFile)) {
+    const lockData = checkPipelineLock(cwd);
+    if (lockData !== null) {
       if (/\bgit\s+commit\b/.test(command)) {
-        let lockData = {};
-        try { lockData = JSON.parse(readFileSync(lockFile, 'utf8')); } catch { /* ignore */ }
-        console.log(JSON.stringify({
-          decision: 'block',
-          reason: `[JWForge Git Guard] BLOCKED: Pipeline /${lockData.pipeline || 'deep'} was triggered but state.json not initialized. No commits allowed until pipeline protocol is followed.`
-        }));
+        console.log(BLOCK(`[JWForge Git Guard] BLOCKED: Pipeline /${lockData.pipeline || 'deep'} was triggered but state.json not initialized. No commits allowed until pipeline protocol is followed.`));
         return;
       }
     }
@@ -71,7 +46,7 @@ async function main() {
 
     // No active pipeline and no lock — allow all git commands
     if (!state || state.status !== 'in_progress') {
-      console.log(JSON.stringify({ continue: true, suppressOutput: true }));
+      console.log(ALLOW);
       return;
     }
 
@@ -81,19 +56,13 @@ async function main() {
     if (/\bgit\s+commit\b/.test(command)) {
       // Block commits during Phase 1-2 (no code should exist to commit)
       if (state.phase <= 2 && state.complexity !== 'S') {
-        console.log(JSON.stringify({
-          decision: 'block',
-          reason: `[JWForge Git Guard] BLOCKED: git commit during Phase ${state.phase}. No commits allowed before design is complete.`
-        }));
+        console.log(BLOCK(`[JWForge Git Guard] BLOCKED: git commit during Phase ${state.phase}. No commits allowed before design is complete.`));
         return;
       }
 
       // Block --amend during pipeline
       if (/--amend/.test(command)) {
-        console.log(JSON.stringify({
-          decision: 'block',
-          reason: `[JWForge Git Guard] BLOCKED: git commit --amend during active pipeline. Create new commits instead to preserve history.`
-        }));
+        console.log(BLOCK(`[JWForge Git Guard] BLOCKED: git commit --amend during active pipeline. Create new commits instead to preserve history.`));
         return;
       }
 
@@ -104,19 +73,13 @@ async function main() {
       const message = msgMatch?.[1] || heredocMatch?.[1] || '';
 
       if (message && !message.includes(prefix)) {
-        console.log(JSON.stringify({
-          decision: 'block',
-          reason: `[JWForge Git Guard] BLOCKED: Commit message must start with "${prefix}". Got: "${message.substring(0, 60)}...". Add the pipeline prefix to your commit message.`
-        }));
+        console.log(BLOCK(`[JWForge Git Guard] BLOCKED: Commit message must start with "${prefix}". Got: "${message.substring(0, 60)}...". Add the pipeline prefix to your commit message.`));
         return;
       }
 
       // If we can't extract the message (complex command), warn but allow
       if (!message) {
-        console.log(JSON.stringify({
-          continue: true,
-          message: `[JWForge] Reminder: commit messages during this pipeline must use "${prefix}" prefix.`
-        }));
+        console.log(ALLOW_MSG(`[JWForge] Reminder: commit messages during this pipeline must use "${prefix}" prefix.`));
         return;
       }
     }
@@ -134,17 +97,14 @@ async function main() {
 
     for (const { pattern, reason } of dangerousPatterns) {
       if (pattern.test(command)) {
-        console.log(JSON.stringify({
-          decision: 'block',
-          reason: `[JWForge Git Guard] BLOCKED: ${reason} during active pipeline. This could destroy pipeline work. Stop the pipeline first with /cancel if needed.`
-        }));
+        console.log(BLOCK(`[JWForge Git Guard] BLOCKED: ${reason} during active pipeline. This could destroy pipeline work. Stop the pipeline first with /cancel if needed.`));
         return;
       }
     }
 
-    console.log(JSON.stringify({ continue: true, suppressOutput: true }));
+    console.log(ALLOW);
   } catch {
-    console.log(JSON.stringify({ continue: true, suppressOutput: true }));
+    console.log(ALLOW);
   }
 }
 
