@@ -47,7 +47,11 @@
     "archive_path": ".jwforge/archive/",
     "notion_fallback": "terminal",
     "auto_fix_on_verify_fail": true,
-    "max_improvements_per_run": 10
+    "max_improvements_per_run": 10,
+    "loop_cooldown_minutes": 20,
+    "loop_hard_cap_iterations": 50,
+    "loop_hard_cap_hours": 24,
+    "loop_max_zero_improvement_streak": 2
   },
   "cost_warning": {
     "enabled": true,

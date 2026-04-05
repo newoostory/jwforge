@@ -33,14 +33,14 @@ function readStdin() {
 const KEYWORDS = [
   // Cancel / stop
   { patterns: ['취소', 'cancel', 'stop jwforge', 'abort'], skill: 'cancel', priority: 1 },
+  // Selfdeep pipeline (MUST be checked before 'deep' to prevent substring match)
+  { patterns: ['selfdeep', '/selfdeep', '자가개선'], skill: 'selfdeep', priority: 2 },
   // Deep pipeline
-  { patterns: ['deep', '/deep'], skill: 'deep', priority: 2, pipeline: 'deep' },
+  { patterns: ['/deep'], skill: 'deep', priority: 3, pipeline: 'deep', wordBoundary: ['deep'] },
   // Surface pipeline
-  { patterns: ['surface', '/surface', 'quick fix', '빠른 수정'], skill: 'surface', priority: 3, pipeline: 'surface' },
+  { patterns: ['surface', '/surface', 'quick fix', '빠른 수정'], skill: 'surface', priority: 4, pipeline: 'surface' },
   // Resume pipeline
-  { patterns: ['resume', '/resume', '재개'], skill: 'resume', priority: 4 },
-  // Selfdeep pipeline
-  { patterns: ['selfdeep', '/selfdeep', '자가개선'], skill: 'selfdeep', priority: 5 },
+  { patterns: ['resume', '/resume', '재개'], skill: 'resume', priority: 5 },
   // TDD mode
   { patterns: ['tdd', 'test first', '테스트 먼저'], mode: 'tdd', priority: 10 },
   // Verify mode
@@ -109,8 +109,18 @@ async function main() {
     const cwd = process.env.CLAUDE_CWD || process.cwd();
 
     // Check for keyword matches
+    // Uses word-boundary regex for keywords that could be substrings of others
     const matches = KEYWORDS
-      .filter(kw => kw.patterns.some(p => userMessage.includes(p.toLowerCase())))
+      .filter(kw => {
+        // First check exact/substring patterns
+        const hasPatternMatch = kw.patterns.some(p => userMessage.includes(p.toLowerCase()));
+        if (hasPatternMatch) return true;
+        // Then check word-boundary patterns (e.g., 'deep' matches as whole word only)
+        if (kw.wordBoundary) {
+          return kw.wordBoundary.some(w => new RegExp(`(?:^|\\s|/)${w.toLowerCase()}(?:\\s|$)`, 'i').test(userMessage));
+        }
+        return false;
+      })
       .sort((a, b) => a.priority - b.priority);
 
     if (matches.length === 0) {
@@ -144,6 +154,20 @@ async function main() {
         message: MODE_MESSAGES[match.mode]
       }));
       return;
+    }
+
+    // Selfdeep: detect --loop flag and emit structured message for the skill
+    if (match.skill === 'selfdeep') {
+      const originalMessage = (data.message || data.content || data.prompt || '').trim();
+      if (originalMessage.toLowerCase().includes('--loop')) {
+        const loopMatch = originalMessage.match(/--loop(?:\s+(\S+))?/i);
+        const loopArg = (loopMatch && loopMatch[1]) ? loopMatch[1] : null;
+        console.log(JSON.stringify({
+          continue: true,
+          message: `[SELFDEEP_LOOP] loop_arg=${loopArg}`
+        }));
+        return;
+      }
     }
 
     console.log(JSON.stringify({ continue: true, suppressOutput: true }));
