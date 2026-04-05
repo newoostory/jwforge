@@ -168,39 +168,43 @@ if [[ -f "$HOOKS_JSON" ]]; then
     echo '{}' > "$SETTINGS_FILE"
   fi
 
-  if grep -q "jwforge" "$SETTINGS_FILE" 2>/dev/null; then
-    echo "  [SKIP] Hooks already registered"
-  else
-    node -e "
-      const fs = require('fs');
-      const raw = fs.readFileSync('$SETTINGS_FILE_NODE', 'utf8').replace(/^\uFEFF/, '');
-      const settings = JSON.parse(raw);
-      const hooksConfig = JSON.parse(fs.readFileSync('$HOOKS_JSON_NODE', 'utf8'));
+  node -e "
+    const fs = require('fs');
+    const raw = fs.readFileSync('$SETTINGS_FILE_NODE', 'utf8').replace(/^\uFEFF/, '');
+    const settings = JSON.parse(raw);
+    const hooksConfig = JSON.parse(fs.readFileSync('$HOOKS_JSON_NODE', 'utf8'));
 
-      if (!settings.hooks) settings.hooks = {};
+    if (!settings.hooks) settings.hooks = {};
 
-      // Replace \$CLAUDE_PLUGIN_ROOT with actual runtime path
-      const runtimePath = '$RUNTIME_DIR_NODE';
-      const replaceRoot = (cmd) => cmd.replace(/\\\$CLAUDE_PLUGIN_ROOT|\\\"\\\$CLAUDE_PLUGIN_ROOT\\\"/g, '\"' + runtimePath + '\"').replace(/\"\"/g, '\"');
+    // Replace \$CLAUDE_PLUGIN_ROOT with actual runtime path
+    const runtimePath = '$RUNTIME_DIR_NODE';
+    const replaceRoot = (cmd) => cmd.replace(/\\\$CLAUDE_PLUGIN_ROOT|\\\"\\\$CLAUDE_PLUGIN_ROOT\\\"/g, '\"' + runtimePath + '\"').replace(/\"\"/g, '\"');
 
-      for (const [event, matchers] of Object.entries(hooksConfig.hooks || {})) {
-        if (!settings.hooks[event]) settings.hooks[event] = [];
-        for (const matcher of matchers) {
-          for (const hook of matcher.hooks) {
-            const entry = {
-              matcher: matcher.matcher || '',
-              command: replaceRoot(hook.command)
-            };
-            if (hook.timeout) entry.timeout = hook.timeout;
-            settings.hooks[event].push(entry);
-          }
+    // Remove old JWForge hooks from every event array, preserve all others
+    for (const event of Object.keys(settings.hooks)) {
+      settings.hooks[event] = (settings.hooks[event] || []).filter(
+        (h) => typeof h.command !== 'string' || !h.command.includes('jwforge')
+      );
+    }
+
+    // Add fresh JWForge hooks
+    for (const [event, matchers] of Object.entries(hooksConfig.hooks || {})) {
+      if (!settings.hooks[event]) settings.hooks[event] = [];
+      for (const matcher of matchers) {
+        for (const hook of matcher.hooks) {
+          const entry = {
+            matcher: matcher.matcher || '',
+            command: replaceRoot(hook.command)
+          };
+          if (hook.timeout) entry.timeout = hook.timeout;
+          settings.hooks[event].push(entry);
         }
       }
+    }
 
-      fs.writeFileSync('$SETTINGS_FILE_NODE', JSON.stringify(settings, null, 2));
-    "
-    echo "  [OK] Hooks registered from hooks.json"
-  fi
+    fs.writeFileSync('$SETTINGS_FILE_NODE', JSON.stringify(settings, null, 2));
+  "
+  echo "  [OK] Hooks merged from hooks.json (old JWForge hooks replaced, others preserved)"
 else
   echo "  [WARN] hooks.json not found, skipping hook registration"
 fi
@@ -269,9 +273,12 @@ fi
 # --- Done ---
 
 # Write install metadata for uninstaller
+REPO_VERSION=$(node -e "try{const s=JSON.parse(require('fs').readFileSync('$(to_node_path "$JWFORGE_HOME/config/settings.json")', 'utf8'));console.log(s.version||'unknown')}catch(e){console.log('unknown')}" 2>/dev/null || echo "unknown")
+INSTALL_COMMIT=$(cd "$JWFORGE_HOME" && git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 cat > "$RUNTIME_DIR/.install-meta.json" <<EOF
 {
-  "version": "2.0.0",
+  "version": "$REPO_VERSION",
+  "commit": "$INSTALL_COMMIT",
   "installed_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
   "install_mode": "$INSTALL_MODE",
   "source": "$JWFORGE_HOME_NODE",
