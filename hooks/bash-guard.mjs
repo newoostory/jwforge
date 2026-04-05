@@ -8,6 +8,9 @@
  * during pipeline phases where Edit/Write would also be blocked.
  *
  * Same phase logic as pre-tool-guard.mjs but applied to Bash commands.
+ * NOTE: All phase rules check state.phase (pipeline-agnostic), so /deeptk is handled
+ * identically to /deep. The only pipeline-specific check is RULE 3 (surface bug-fix),
+ * which explicitly checks state.pipeline === 'surface' and does not affect deeptk.
  */
 
 import { readFileSync, existsSync } from 'fs';

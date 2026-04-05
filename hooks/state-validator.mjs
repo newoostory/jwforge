@@ -166,6 +166,19 @@ async function main() {
       }
     }
 
+    // === RULE 5a: deeptk does not support S complexity — block advancement beyond Phase 1 ===
+    if (newPhase > 1) {
+      const pipeline = newState.pipeline || currentState.pipeline;
+      const complexity = newState.complexity || currentState.complexity;
+      if (pipeline === 'deeptk' && complexity === 'S') {
+        console.log(JSON.stringify({
+          decision: 'block',
+          reason: `[JWForge State Validator] BLOCKED: deeptk pipeline does not support S complexity. S tasks must use /deep instead. Cannot advance beyond Phase 1 with S complexity in deeptk.`
+        }));
+        return;
+      }
+    }
+
     // === RULE 5: Complexity/type immutability after classification ===
     if (currentState.complexity && newState.complexity && currentState.complexity !== newState.complexity) {
       if (oldPhase >= 2) {

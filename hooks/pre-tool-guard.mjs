@@ -7,8 +7,12 @@
  * 0. Pipeline lock check → if pipeline-required.json exists but state.json doesn't,
  *    BLOCK everything (AI is trying to skip the pipeline protocol)
  * 1. /deep Phase 1-2 active → BLOCK all Edit/Write to project files (design not done yet)
+ *    NOTE: /deeptk is also handled here — phase logic is pipeline-agnostic (checks state.phase),
+ *    so deeptk Phase 1 (Discover) and Phase 2 (Design) are blocked the same way as /deep.
  * 2. /deep Phase 3 active → BLOCK edits to files NOT in architecture.md
+ *    NOTE: /deeptk Phase 3 (Build) uses the same architecture.md check.
  * 3. /surface active, type=bug-fix, no root_cause in state → BLOCK (investigate first)
+ *    NOTE: This rule is surface-specific (checks pipeline === 'surface'), does not affect deeptk.
  * 4. Always: BLOCK writes to sensitive files
  *
  * Allowed always: .jwforge/**, state.json, task-spec.md, architecture.md (pipeline artifacts)
@@ -103,27 +107,6 @@ async function main() {
 
     if (!state || state.status !== 'in_progress') {
       // No active pipeline and no lock — allow everything
-      console.log(JSON.stringify({ continue: true, suppressOutput: true }));
-      return;
-    }
-
-    // === RULE 0b: /selfdeep pipeline guards ===
-    // Selfdeep uses step/steps instead of phase. Block writes during analysis/research/plan steps.
-    if (state.pipeline === 'selfdeep') {
-      const readOnlySteps = ['sandbox', 'analyze', 'research', 'plan'];
-      // 'loop-iterate' step (loop mode): same write model as 'improve' — sandbox-only writes.
-      // Not in readOnlySteps, so it falls through to the allow-all below.
-      // The iterator agent's own constraints enforce sandbox-only writes.
-      if (readOnlySteps.includes(state.step)) {
-        console.log(JSON.stringify({
-          decision: 'block',
-          reason: `[JWForge Guard] BLOCKED: Cannot edit project files during SelfDeep step "${state.step}". Only the "improve" step (in sandbox) and "apply" step (with user approval) allow file modifications.`
-        }));
-        return;
-      }
-      // During 'improve' step, only sandbox path is writable — but that's enforced by the
-      // Improver agent's own constraints, not this hook (hook sees absolute paths).
-      // During 'apply' step, writes to project files are allowed.
       console.log(JSON.stringify({ continue: true, suppressOutput: true }));
       return;
     }

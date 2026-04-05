@@ -33,8 +33,8 @@ function readStdin() {
 const KEYWORDS = [
   // Cancel / stop
   { patterns: ['취소', 'cancel', 'stop jwforge', 'abort'], skill: 'cancel', priority: 1 },
-  // Selfdeep pipeline (MUST be checked before 'deep' to prevent substring match)
-  { patterns: ['selfdeep', '/selfdeep', '자가개선'], skill: 'selfdeep', priority: 2 },
+  // DeepTK pipeline (must be before /deep to avoid word-boundary interference)
+  { patterns: ['/deeptk'], skill: 'deeptk', priority: 2, pipeline: 'deeptk', wordBoundary: ['deeptk'] },
   // Deep pipeline
   { patterns: ['/deep'], skill: 'deep', priority: 3, pipeline: 'deep', wordBoundary: ['deep'] },
   // Surface pipeline
@@ -154,20 +154,6 @@ async function main() {
         message: MODE_MESSAGES[match.mode]
       }));
       return;
-    }
-
-    // Selfdeep: detect --loop flag and emit structured message for the skill
-    if (match.skill === 'selfdeep') {
-      const originalMessage = (data.message || data.content || data.prompt || '').trim();
-      if (originalMessage.toLowerCase().includes('--loop')) {
-        const loopMatch = originalMessage.match(/--loop(?:\s+(\S+))?/i);
-        const loopArg = (loopMatch && loopMatch[1]) ? loopMatch[1] : null;
-        console.log(JSON.stringify({
-          continue: true,
-          message: `[SELFDEEP_LOOP] loop_arg=${loopArg}`
-        }));
-        return;
-      }
     }
 
     console.log(JSON.stringify({ continue: true, suppressOutput: true }));

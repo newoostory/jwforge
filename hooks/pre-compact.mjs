@@ -65,26 +65,6 @@ async function main() {
       `- Status: ${state.status || '?'}`,
     ];
 
-    // SelfDeep-specific state: show step progress
-    if (pipeline === 'selfdeep' && state.steps) {
-      lines.push(`- Run ID: ${state.run_id || '?'}`);
-      lines.push(`- Sandbox: ${state.sandbox_path || '?'}`);
-      lines.push(`- Step progress:`);
-      for (const [stepName, stepStatus] of Object.entries(state.steps)) {
-        lines.push(`  - ${stepName}: ${stepStatus}`);
-      }
-      // SelfDeep Loop mode state preservation
-      if (state.loop && state.loop.enabled) {
-        lines.push(`- Loop Mode: ACTIVE`);
-        lines.push(`  - Termination: ${state.loop.termination_type} (${state.loop.termination_value || 'auto'})`);
-        lines.push(`  - Current iteration: ${state.loop.current_iteration}`);
-        lines.push(`  - Total improvements: ${state.loop.total_improvements}`);
-        lines.push(`  - Zero-improvement streak: ${state.loop.zero_improvement_streak}`);
-        lines.push(`  - Resume after: ${state.loop.resume_after || 'none'}`);
-        lines.push(`  - Stopped reason: ${state.loop.stopped_reason || 'none'}`);
-      }
-    }
-
     if (state.team_name) {
       lines.push(`- Team: ${state.team_name}`);
     }
@@ -100,8 +80,14 @@ async function main() {
       lines.push(`- Review count: ${state.phase4.review_count || 0}`);
     }
 
+    // Add deeptk-specific state info
+    if (state.pipeline === 'deeptk' && state.phase1 && state.phase1.interview_round) {
+      lines.push(`- Interview rounds: ${state.phase1.interview_round}`);
+      lines.push(`- Researcher validated: ${state.phase1.researcher_validated || false}`);
+    }
+
     // Check for key artifacts
-    const artifacts = ['task-spec.md', 'architecture.md', 'agent-log.jsonl'];
+    const artifacts = ['task-spec.md', 'architecture.md', 'agent-log.jsonl', 'interview-log.md'];
     const existing = artifacts.filter(f => existsSync(join(stateDir, f)));
     if (existing.length > 0) {
       lines.push('', '## Available Artifacts');
@@ -111,11 +97,9 @@ async function main() {
     lines.push('', '## Resume Instructions');
     lines.push('Read .jwforge/current/state.json and resume from the current phase/step.');
     lines.push('Key files: task-spec.md (requirements), architecture.md (design), agent-log.jsonl (history).');
-    if (state.loop && state.loop.enabled) {
-      lines.push('Loop mode active. Resume from iteration ' + (state.loop.current_iteration || 0) + '. Check resume_after for cooldown timing.');
-      lines.push('Iteration results stored in .jwforge/current/selfdeep-loops/');
+    if (state.pipeline === 'deeptk') {
+      lines.push('deeptk: interview-log.md (Q&A history for Phase 1 resume).');
     }
-
     const snapshotFile = join(stateDir, 'compact-snapshot.md');
     writeFileSync(snapshotFile, lines.join('\n'));
 

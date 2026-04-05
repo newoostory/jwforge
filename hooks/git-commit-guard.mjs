@@ -75,7 +75,7 @@ async function main() {
       return;
     }
 
-    const prefix = state.pipeline === 'surface' ? '[jwforge-surface]' : '[jwforge]';
+    const prefix = state.pipeline === 'surface' ? '[jwforge-surface]' : state.pipeline === 'deeptk' ? '[jwforge-deeptk]' : '[jwforge]';
 
     // === Check for git commit ===
     if (/\bgit\s+commit\b/.test(command)) {

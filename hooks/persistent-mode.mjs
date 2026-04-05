@@ -70,7 +70,12 @@ async function main() {
     }
 
     // Pipeline is in progress but LLM stopped — inject continuation
-    const phaseNames = {
+    const phaseNames = state.pipeline === 'deeptk' ? {
+      1: 'Discover',
+      2: 'Design',
+      3: 'Build',
+      4: 'Validate'
+    } : {
       1: 'Deep Interview',
       2: 'Architecture',
       3: 'Execute',

@@ -53,7 +53,7 @@ echo ""
 
 # --- 1. Remove skills ---
 
-for skill_name in jwforge surface cancel commit verify simplify; do
+for skill_name in jwforge deeptk surface cancel commit verify simplify; do
   if [ -d "$CLAUDE_DIR/skills/$skill_name" ]; then
     rm -rf "$CLAUDE_DIR/skills/$skill_name"
     echo "[OK] /$skill_name skill removed"
@@ -65,6 +65,26 @@ done
 if [ -d "$RUNTIME_DIR" ]; then
   rm -rf "$RUNTIME_DIR"
   echo "[OK] Runtime files removed ($RUNTIME_DIR)"
+fi
+
+# --- 3. Remove statusline ---
+
+STATUSLINE_FILE="$CLAUDE_DIR/statusline.sh"
+if [ -f "$STATUSLINE_FILE" ]; then
+  rm -f "$STATUSLINE_FILE"
+  echo "[OK] statusline.sh removed"
+fi
+
+# Remove statusLine from settings.json
+if [ -f "$SETTINGS_FILE" ] && grep -q "statusLine" "$SETTINGS_FILE" 2>/dev/null; then
+  node -e "
+    const fs = require('fs');
+    const raw = fs.readFileSync('$(to_node_path "$SETTINGS_FILE")', 'utf8').replace(/^\uFEFF/, '');
+    const settings = JSON.parse(raw);
+    delete settings.statusLine;
+    fs.writeFileSync('$(to_node_path "$SETTINGS_FILE")', JSON.stringify(settings, null, 2));
+  "
+  echo "[OK] statusLine removed from settings.json"
 fi
 
 # --- 4. Remove stop hook (global only) ---

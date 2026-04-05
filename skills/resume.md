@@ -74,6 +74,7 @@ Resume the pipeline.
 
 3. Detect pipeline type:
    - If state.json has `"pipeline": "surface"` → **Surface pipeline** (go to Branch B-Surface)
+   - If state.json has `"pipeline": "deeptk"` → **DeepTK pipeline** (go to Branch B-DeepTK)
    - Otherwise → **Deep pipeline** (go to Branch B-Deep)
 
 ---
@@ -105,6 +106,35 @@ Then continue executing the pipeline from the resume point, following all rules 
 
 ---
 
+#### Branch B-DeepTK: Resume DeepTK Pipeline
+
+Read `skills/deeptk.md` for the full pipeline specification.
+
+Resume based on `phase` and `step` in state.json:
+
+| Current Phase | Condition | Resume Action |
+|---------------|-----------|---------------|
+| Phase 1 | `task-spec.md` exists | Skip to Phase 2 |
+| Phase 1 | `interview-log.md` exists, `task-spec.md` missing | Recreate interview team, resume from last recorded round |
+| Phase 1 | Neither file exists | Restart Phase 1 from step 1-1 |
+| Phase 2 | `architecture.md` exists | Skip to Phase 3 |
+| Phase 2 | `architecture.md` missing | Restart Phase 2 |
+| Phase 3 | Check `completed_levels` in state | Resume from first incomplete level |
+| Phase 4 | Check `stages_completed` in state | Resume from first incomplete stage |
+
+**Team note:** The previous team is gone. On resume:
+
+- **Phase 1 resume:** Read `interview-log.md` to recover full Q&A history. Call TeamCreate, add Interviewer, Analyst, and Researcher teammates (read `agents/interviewer.md`, `agents/analyst.md`, `agents/researcher.md`). Load context from `interview-log.md` and `state.json` (interview_round, confidence). Resume the interview relay loop from the next round.
+- **Phase 2 resume:** Call TeamCreate, add Architect teammate (read `agents/architect.md`). Load context from `task-spec.md` and `state.json`.
+- **Phase 3 resume:** Call TeamCreate, add Architect teammate. Load context from `task-spec.md`, `architecture.md`, `state.json` (completed_levels). Spawn executor subagents for the first incomplete level.
+- **Phase 4 resume:** Load context from `task-spec.md`, `architecture.md`, `state.json` (stages_completed, fix_loop_count). Resume from the first incomplete stage.
+
+Update state.json `status` back to `"in_progress"` before proceeding.
+
+Then continue executing the pipeline from the resume point, following all rules in `skills/deeptk.md`.
+
+---
+
 #### Branch B-Surface: Resume Surface Pipeline
 
 Read `skills/surface.md` for the full surface pipeline specification.
@@ -133,6 +163,7 @@ Then continue executing the surface pipeline from the resume point, following al
 
 If `state.json` has:
 - `"pipeline": "surface"` → surface
+- `"pipeline": "deeptk"` → deeptk
 - `"pipeline": "deep"` → deep
 - No `pipeline` field → deep (legacy state format)
 
