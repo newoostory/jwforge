@@ -153,7 +153,7 @@ Required fields:
 ```yaml
 ---
 title: "Title"
-source: "URL or filepath or MANUAL"
+source: "URL or filepath or MANUAL or EXPLAIN"
 type: articles|papers|repos|notes|data
 ingested: YYYY-MM-DD
 tags: [tag1, tag2]
@@ -162,7 +162,7 @@ summary: "2-3 sentence summary"
 ```
 
 - `type` must be one of: `articles`, `papers`, `repos`, `notes`, `data`
-- `source` is the original URL, filepath, or `MANUAL` for freeform text
+- `source` is the original URL, filepath, `MANUAL` for freeform text, or `EXPLAIN` for study-note mode
 - `tags` must be a non-empty list
 - `summary` must be non-empty
 

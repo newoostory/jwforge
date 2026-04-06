@@ -19,8 +19,8 @@ Wiki is **standalone** — no JWForge pipeline state, no hooks, no teams. All op
 |---------|---------|
 | `/wiki init <topic> [--local]` | Create a new topic wiki with full directory structure |
 | `/wiki status` | Show wiki hub overview, topic counts, local wiki status |
-| `/wiki link <path>` | Register an existing wiki directory in the hub |
-| `/wiki sync [--from <host>]` | One-way pull sync from remote wiki via Tailscale + rsync |
+| `/wiki link [--scan\|--update]` | Discover and insert wikilinks between articles (bidirectional) |
+| `/wiki sync [--setup\|--now\|--log]` | Git-push based one-way sync to remote repository |
 | `/wiki ingest <source>` | Ingest URLs, files, text, inbox items into `raw/` |
 | `/wiki compile [--full] [--code]` | Compile raw sources into wiki articles |
 | `/wiki query <question>` | Query wiki with citations (quick/standard/deep) |
