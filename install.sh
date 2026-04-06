@@ -168,7 +168,7 @@ for skill_file in "$CLAUDE_DIR/skills"/*/SKILL.md; do
     sed -i "s|Read(\"config/|Read(\"$RUNTIME_DIR_NODE/config/|g" "$skill_file"
     sed -i "s|in \`agents/\`|in \`$RUNTIME_DIR_NODE/agents/\`|g" "$skill_file"
     sed -i "s|in \`templates/\`|in \`$RUNTIME_DIR_NODE/templates/\`|g" "$skill_file"
-    # Patch skill-local reference paths (e.g., wiki references/)
+    # Patch skill-local reference paths (references/ within skill dirs)
     _skill_name="$(basename "$(dirname "$skill_file")")"
     _skill_dir_node="$(to_node_path "$CLAUDE_DIR/skills/$_skill_name")"
     sed -i "s|Read(\"references/|Read(\"$_skill_dir_node/references/|g" "$skill_file"
@@ -326,6 +326,6 @@ echo "  /jwforge <task>  Full pipeline (new features, complex changes)"
 echo "  /deeptk <task>   Heavy pipeline with relay architecture (M/L/XL tasks)"
 echo "  /surface <task>  Light pipeline (bug fix, refactor, config)"
 echo "  /resume          Resume a stopped pipeline"
-echo "  /wiki            LLM wiki — knowledge base management (standalone)"
+echo "  /wiki <command>  Wiki knowledge base (init, ingest, query, sync, ...)"
 echo ""
 echo "To uninstall: bash $JWFORGE_HOME/uninstall.sh $([ "$INSTALL_MODE" == "local" ] && echo "--local $(dirname "$CLAUDE_DIR")")"

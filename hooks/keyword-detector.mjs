@@ -15,7 +15,6 @@
 
 import { writeFileSync, existsSync, mkdirSync, unlinkSync } from 'fs';
 import { join } from 'path';
-import { homedir } from 'os';
 import { readStdin, getCwd, ALLOW, ALLOW_MSG } from './lib/common.mjs';
 
 const KEYWORDS = [
@@ -29,14 +28,12 @@ const KEYWORDS = [
   { patterns: ['surface', '/surface', 'quick fix', '빠른 수정'], skill: 'surface', priority: 4, pipeline: 'surface' },
   // Resume pipeline
   { patterns: ['resume', '/resume', '재개'], skill: 'resume', priority: 5 },
-  // Wiki commands (explicit)
-  { patterns: ['/wiki'], skill: 'wiki', priority: 6 },
   // TDD mode
   { patterns: ['tdd', 'test first', '테스트 먼저'], mode: 'tdd', priority: 10 },
   // Verify mode
   { patterns: ['verify', 'check', '검증'], mode: 'verify', priority: 11 },
-  // Wiki ambient keywords (low priority — only when no other match)
-  { patterns: ['위키', 'knowledge base', '지식 베이스', 'ingest', 'compile wiki'], mode: 'wiki-ambient', priority: 20 },
+  // Wiki skill
+  { patterns: ['/wiki', 'wiki', 'knowledge base', '위키', '지식베이스'], skill: 'wiki', priority: 8 },
 ];
 
 const MODE_MESSAGES = {
@@ -46,28 +43,8 @@ const MODE_MESSAGES = {
   verify: `<jwforge-verify-mode>
 [VERIFY MODE] Run all available checks (lint, typecheck, tests) before claiming completion. Report evidence.
 </jwforge-verify-mode>`,
-  'wiki-ambient': `<wiki-active>
-[WIKI] A wiki-related keyword was detected. Use the wiki skill to help the user.
-Read the wiki SKILL.md for full instructions. Available commands: /wiki, /wiki:ingest, /wiki:compile, /wiki:query, /wiki:search, /wiki:research, /wiki:thesis, /wiki:lint, /wiki:output, /wiki:assess.
-If a wiki exists at ~/wiki/ or .wiki/, check it for relevant content before answering.
-</wiki-active>`,
 };
 
-/**
- * Check if a wiki exists (~/wiki/ or .wiki/ in cwd).
- * Returns an ambient message if wiki is present, null otherwise.
- */
-function checkWikiPresence(cwd) {
-  const hubWiki = join(homedir(), 'wiki');
-  const localWiki = join(cwd, '.wiki');
-  if (existsSync(hubWiki) || existsSync(localWiki)) {
-    const location = existsSync(localWiki) ? '.wiki/ (local)' : '~/wiki/ (hub)';
-    return `<wiki-available>
-A wiki exists at ${location}. When answering factual questions, check the wiki first using Read on the wiki's _index.md. Wiki commands: /wiki:query, /wiki:search, /wiki:ingest, /wiki:research.
-</wiki-available>`;
-  }
-  return null;
-}
 
 /**
  * Create pipeline lock file IMMEDIATELY when /deep or /surface is detected.
@@ -137,13 +114,7 @@ async function main() {
       .sort((a, b) => a.priority - b.priority);
 
     if (matches.length === 0) {
-      // No keyword match — still check ambient wiki presence
-      const wikiMsg = checkWikiPresence(cwd);
-      if (wikiMsg) {
-        console.log(ALLOW_MSG(wikiMsg));
-      } else {
-        console.log(ALLOW);
-      }
+      console.log(ALLOW);
       return;
     }
 

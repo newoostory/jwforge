@@ -60,14 +60,6 @@ for skill_name in jwforge deeptk surface cancel commit verify simplify wiki; do
   fi
 done
 
-# Remove JWForge command subdirectories
-for cmd_name in wiki; do
-  if [ -d "$CLAUDE_DIR/commands/$cmd_name" ]; then
-    rm -rf "$CLAUDE_DIR/commands/$cmd_name"
-    echo "[OK] /$cmd_name commands removed"
-  fi
-done
-
 # --- 2. Remove runtime files ---
 
 if [ -d "$RUNTIME_DIR" ]; then
