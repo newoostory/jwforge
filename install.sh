@@ -176,10 +176,10 @@ for skill_file in "$CLAUDE_DIR/skills"/*/SKILL.md; do
 done
 
 # Patch <JWFORGE_HOME> placeholders in installed command files
-for cmd_file in "$CLAUDE_DIR/commands"/wiki/*.md; do
+CLAUDE_DIR_NODE="$(to_node_path "$CLAUDE_DIR")"
+for cmd_file in "$CLAUDE_DIR/commands"/*/*.md; do
   if [[ -f "$cmd_file" ]]; then
-    _wiki_skill_dir="$(to_node_path "$CLAUDE_DIR/skills/wiki")"
-    sed -i "s|<JWFORGE_HOME>/skills/wiki/references/|$_wiki_skill_dir/references/|g" "$cmd_file"
+    sed -i "s|<JWFORGE_HOME>|$CLAUDE_DIR_NODE|g" "$cmd_file"
   fi
 done
 

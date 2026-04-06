@@ -63,7 +63,7 @@ For each uncompiled raw source:
    - Add `[[wikilink]]` and `[text](relative/path)` dual-links for related articles
    - Include a `## Sources` section at the bottom listing raw sources used
    - Confidence scoring: `high` = multiple corroborating sources, `medium` = single reliable source, `low` = single weak/unverified source
-6. Update the raw source's frontmatter: set `status: compiled`
+6. Track compilation in wiki `_index.md` by adding the raw source path to a `compiled_sources` list (raw/ files are immutable — never edit them)
 
 ## Step 6: Update Indexes
 

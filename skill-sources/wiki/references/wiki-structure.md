@@ -111,24 +111,29 @@ When any `/wiki` command runs, resolve which wiki to use:
 
 ```json
 {
-  "default": "~/wiki",
-  "wikis": {
-    "main": { "path": "~/wiki", "description": "Global knowledge base" },
-    "<topic>": { "path": "~/wiki/topics/<topic>", "description": "..." }
-  },
-  "local_wikis": [
-    { "path": "/absolute/path/.wiki", "description": "..." }
+  "wikis": [
+    {
+      "name": "<topic>",
+      "title": "<Human-readable title>",
+      "path": "~/wiki/topics/<topic>",
+      "created": "<ISO date>",
+      "tags": []
+    }
   ]
 }
 ```
+
+Each entry is appended when `/wiki init <topic>` runs. Do not duplicate entries with the same `name`.
 
 ### `config.md` Frontmatter
 
 ```yaml
 ---
 title: "Wiki Title"
-description: "What this wiki is about"
+topic: "<topic-slug>"
 created: YYYY-MM-DD
+scope: "What this wiki covers"
+conventions: "Project-specific naming or style rules"
 ---
 ```
 
