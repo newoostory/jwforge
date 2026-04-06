@@ -1,197 +1,192 @@
-# /wiki:sync — Wiki Synchronization (Tailscale + rsync)
+You are a Wiki Sync agent. Your task is to manage git-based synchronization of the wiki to a remote.
 
-One-way pull sync: this device **receives only** from a remote source via Tailscale.
+The user has invoked `/wiki:sync` with:
 
-`$ARGUMENTS`
+$ARGUMENTS
 
----
+## Step 1: Resolve Wiki
 
-## Argument Parsing
+Determine which wiki to operate on:
 
-Parse `$ARGUMENTS`:
-- `setup <tailscale-host> [--path <remote-path>] [--interval <minutes>]` — Configure auto-sync
-- `status` — Show sync status and last sync time
-- `pull` — Manual one-time pull
-- `stop` — Disable auto-sync
-- `log` — Show recent sync log
-- No args → show status
+1. `--local` flag in $ARGUMENTS → use `.wiki/` in the current working directory
+2. `--wiki <name>` flag in $ARGUMENTS → look up named wiki from `~/wiki/wikis.json`, use `~/wiki/topics/<name>/`
+3. Current directory contains `.wiki/` → use it
+4. Otherwise → use `~/wiki/` hub
 
-Defaults:
-- `--path`: `~/wiki/` (remote wiki path)
-- `--interval`: `5` (minutes)
+## Step 2: Parse Arguments
 
----
+From $ARGUMENTS, extract the subcommand (one of):
+- `--setup` — initial sync configuration (git remote, cron registration)
+- `--status` — show current sync state
+- `--now` — execute sync immediately
+- `--log` — show recent sync log
 
-## Step 1: Wiki Resolution
+If no subcommand is provided, default to `--status`.
 
-Determine local wiki path:
-1. `--local` flag → `.wiki/`
-2. Otherwise → `~/wiki/`
+## Step 3: Locate Sync Scripts
 
----
+The following files are used for sync. Check their existence before any operation:
+- `~/wiki/.sync-push.sh` — the sync execution script
+- `~/wiki/.sync-config.json` — sync configuration (remote, schedule, last run)
+- `~/wiki/.sync-log` — append-only sync log
 
-## Step 2: Handle Subcommand
+## Step 4-A: Setup (`--setup`)
 
-### `setup <tailscale-host>`
+### 4-A-1: Check prerequisites
 
-Configure one-way rsync pull from a Tailscale peer.
+Verify:
+1. `~/wiki/` exists and is a git repository (`git -C ~/wiki rev-parse --git-dir`)
+2. If not a git repo: initialize with `git -C ~/wiki init`, then create an initial commit
 
-1. **Verify Tailscale is running:**
-   ```bash
-   tailscale status
-   ```
-   If not running, tell the user: "Tailscale is not active. Run `tailscale up` first."
+### 4-A-2: Configure remote
 
-2. **Verify the remote host is reachable:**
-   ```bash
-   tailscale ping <tailscale-host> --c 1 --timeout 5s
-   ```
-   If unreachable, tell the user the host is offline.
+Ask the user:
+- "What is the git remote URL for sync?" (e.g. `git@github.com:user/wiki.git`)
 
-3. **Verify rsync is available:**
-   ```bash
-   which rsync
-   ```
-   If missing, suggest: `sudo apt install rsync` or `brew install rsync`.
-
-4. **Test SSH access via Tailscale:**
-   ```bash
-   ssh -o ConnectTimeout=5 -o StrictHostKeyChecking=accept-new <tailscale-host> "ls <remote-path>" 2>&1
-   ```
-   If fails, tell user to ensure SSH is enabled on the remote host (`tailscale up --ssh`).
-
-5. **Create sync config file:**
-   Write `~/wiki/.sync-config.json`:
-   ```json
-   {
-     "remote_host": "<tailscale-host>",
-     "remote_path": "<remote-path>/",
-     "local_path": "<local-wiki-path>/",
-     "interval_minutes": <interval>,
-     "mode": "pull-only",
-     "created": "<ISO date>",
-     "enabled": true
-   }
-   ```
-
-6. **Create the sync script:**
-   Write `~/wiki/.sync-pull.sh`:
-   ```bash
-   #!/usr/bin/env bash
-   # Wiki auto-sync: pull-only from Tailscale peer
-   set -euo pipefail
-
-   CONFIG="$HOME/wiki/.sync-config.json"
-   LOGFILE="$HOME/wiki/.sync-log"
-
-   if [ ! -f "$CONFIG" ]; then
-     echo "$(date -Iseconds) [ERROR] No sync config found" >> "$LOGFILE"
-     exit 1
-   fi
-
-   REMOTE_HOST=$(node -e "console.log(JSON.parse(require('fs').readFileSync('$CONFIG','utf8')).remote_host)")
-   REMOTE_PATH=$(node -e "console.log(JSON.parse(require('fs').readFileSync('$CONFIG','utf8')).remote_path)")
-   LOCAL_PATH=$(node -e "console.log(JSON.parse(require('fs').readFileSync('$CONFIG','utf8')).local_path)")
-
-   # Check if Tailscale is up
-   if ! tailscale status &>/dev/null; then
-     echo "$(date -Iseconds) [SKIP] Tailscale not running" >> "$LOGFILE"
-     exit 0
-   fi
-
-   # Pull via rsync (one-way, delete=no to preserve local-only files)
-   rsync -avz --timeout=30 \
-     --exclude='.sync-*' \
-     --exclude='.obsidian/workspace.json' \
-     --exclude='.obsidian/workspace-*.json' \
-     -e "ssh -o ConnectTimeout=10 -o BatchMode=yes" \
-     "${REMOTE_HOST}:${REMOTE_PATH}" "${LOCAL_PATH}" \
-     >> "$LOGFILE" 2>&1
-
-   echo "$(date -Iseconds) [OK] Sync complete" >> "$LOGFILE"
-
-   # Trim log to last 500 lines
-   tail -n 500 "$LOGFILE" > "$LOGFILE.tmp" && mv "$LOGFILE.tmp" "$LOGFILE"
-   ```
-   Then: `chmod +x ~/wiki/.sync-pull.sh`
-
-7. **Register cron job:**
-   ```bash
-   # Remove any existing wiki sync cron
-   crontab -l 2>/dev/null | grep -v 'wiki/.sync-pull.sh' | crontab -
-
-   # Add new cron entry
-   (crontab -l 2>/dev/null; echo "*/<interval> * * * * $HOME/wiki/.sync-pull.sh") | crontab -
-   ```
-
-8. **Run initial sync:**
-   ```bash
-   bash ~/wiki/.sync-pull.sh
-   ```
-
-9. **Report to user:**
-   ```
-   Wiki sync configured:
-   - Source: <tailscale-host>:<remote-path>
-   - Target: <local-path> (receive only)
-   - Interval: every <interval> minutes
-   - Mode: pull-only (local changes are NOT pushed)
-
-   Commands:
-   - /wiki:sync status  — check sync status
-   - /wiki:sync pull    — manual sync now
-   - /wiki:sync stop    — disable auto-sync
-   ```
-
----
-
-### `status`
-
-1. Read `~/wiki/.sync-config.json`
-2. If not found: "No sync configured. Use `/wiki:sync setup <host>` to set up."
-3. If found, show:
-   - Remote: `<host>:<path>`
-   - Mode: pull-only
-   - Interval: every N minutes
-   - Enabled: yes/no
-   - Last sync: read last `[OK]` line from `~/wiki/.sync-log`
-   - Cron active: check `crontab -l | grep sync-pull`
-
----
-
-### `pull`
-
-Manual one-time pull:
-1. Read config from `~/wiki/.sync-config.json`
-2. Run: `bash ~/wiki/.sync-pull.sh`
-3. Show last 10 lines of `~/wiki/.sync-log`
-
----
-
-### `stop`
-
-1. Remove cron entry:
-   ```bash
-   crontab -l 2>/dev/null | grep -v 'wiki/.sync-pull.sh' | crontab -
-   ```
-2. Update config: `"enabled": false`
-3. Report: "Auto-sync disabled. Use `/wiki:sync setup` to re-enable."
-
----
-
-### `log`
-
-Show last 30 lines of `~/wiki/.sync-log`:
+Add the remote:
 ```bash
-tail -n 30 ~/wiki/.sync-log
+git -C ~/wiki remote add origin <url>
+```
+If `origin` already exists, update it:
+```bash
+git -C ~/wiki remote set-url origin <url>
 ```
 
----
+### 4-A-3: Create .sync-push.sh
 
-## Sync Design Principles
+Create `~/wiki/.sync-push.sh` if it does not exist:
+```bash
+#!/usr/bin/env bash
+set -e
+cd ~/wiki
+git add -A
+git commit -m "wiki sync: $(date -u +%Y-%m-%dT%H:%M:%SZ)" || true
+git push origin master 2>&1
+echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] sync: push complete" >> ~/wiki/.sync-log
+```
+Make it executable: `chmod +x ~/wiki/.sync-push.sh`
 
-- **Pull-only**: local device never pushes. Remote is the source of truth.
-- **Non-destructive**: rsync runs WITHOUT `--delete` — local-only files are preserved.
-- **Obsidian-safe**: excludes `workspace.json` (Obsidian session state) to avoid conflicts.
-- **Offline-resilient**: if Tailscale is down, sync silently skips (logged, no error).
-- **No lock files**: rsync handles concurrent read/write safely for file-level operations.
+### 4-A-4: Create .sync-config.json
+
+Write `~/wiki/.sync-config.json`:
+```json
+{
+  "remote": "<url>",
+  "branch": "master",
+  "schedule": "0 * * * *",
+  "setup_date": "<ISO date>"
+}
+```
+
+### 4-A-5: Register cron job
+
+Register a cron job to run `.sync-push.sh` hourly:
+```
+0 * * * * ~/wiki/.sync-push.sh >> ~/wiki/.sync-log 2>&1
+```
+Add via `crontab -l | { cat; echo "0 * * * * ~/wiki/.sync-push.sh >> ~/wiki/.sync-log 2>&1"; } | crontab -`
+
+Skip if the cron entry already exists (check with `crontab -l | grep sync-push`).
+
+Report:
+```
+Sync configured.
+  Remote: <url>
+  Schedule: hourly (0 * * * *)
+  Script: ~/wiki/.sync-push.sh
+
+Run /wiki:sync --now to push immediately.
+```
+
+## Step 4-B: Status (`--status`)
+
+Read `~/wiki/.sync-config.json`. If it does not exist:
+```
+Sync not configured.
+Run /wiki:sync --setup to configure.
+```
+
+If it exists, read and report:
+- Remote URL
+- Branch
+- Cron schedule
+
+Read the last line of `~/wiki/.sync-log` (if it exists) to get last sync time.
+
+Check cron:
+```bash
+crontab -l 2>/dev/null | grep sync-push
+```
+
+Report:
+```
+Sync Status
+
+  Remote:    <url>
+  Branch:    <branch>
+  Schedule:  <cron expression>
+  Cron:      active | not scheduled
+  Last sync: <timestamp from .sync-log> | never
+
+Run /wiki:sync --now to push immediately.
+Run /wiki:sync --log to see full sync history.
+```
+
+## Step 4-C: Now (`--now`)
+
+### 4-C-1: Check prerequisites
+
+If `.sync-push.sh` does not exist:
+```
+Sync not configured. Run /wiki:sync --setup first.
+```
+Exit.
+
+### 4-C-2: Execute sync
+
+Run:
+```bash
+bash ~/wiki/.sync-push.sh
+```
+
+Capture output. Report success or failure:
+
+On success:
+```
+Sync complete.
+  Pushed to: <remote>
+  Time: <timestamp>
+```
+
+On failure:
+```
+Sync failed.
+  Error: <captured stderr>
+  Check ~/wiki/.sync-log for details.
+```
+
+## Step 4-D: Log (`--log`)
+
+Read `~/wiki/.sync-log`. If it does not exist:
+```
+No sync log found. Run /wiki:sync --now to create the first entry.
+```
+
+Display the last 20 lines of the log:
+```
+Recent sync log (~/wiki/.sync-log):
+
+[2026-04-05T14:00:01Z] sync: push complete
+[2026-04-05T13:00:01Z] sync: push complete
+...
+```
+
+## Rules
+
+- This command uses **git push** for sync — not Syncthing, rsync, or other protocols.
+- Never force-push (`--force`). If push fails due to diverged history, report the error and ask the user to resolve manually.
+- `.sync-push.sh` commits all changes with an auto-generated message. Do not create custom commit messages in this flow.
+- `--setup` is idempotent: re-running it updates config but does not duplicate cron entries.
+- Always check that `~/wiki/` is a git repo before any git operations. Initialize if needed.
+- `--now` runs synchronously and reports the result inline.
+- Do not read or expose the contents of `.gitignore`, SSH keys, or any credential files.
