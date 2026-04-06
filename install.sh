@@ -109,7 +109,25 @@ for skill_dir in "$JWFORGE_HOME/skill-sources"/*/; do
   TARGET_SKILL="$CLAUDE_DIR/skills/$skill_name"
   mkdir -p "$TARGET_SKILL"
   copy_file "$skill_dir/SKILL.md" "$TARGET_SKILL/SKILL.md"
+  # Copy skill-local subdirectories (e.g., references/)
+  for subdir in "$skill_dir"*/; do
+    if [[ -d "$subdir" ]]; then
+      subdir_name="$(basename "$subdir")"
+      copy_dir "$subdir" "$TARGET_SKILL/$subdir_name"
+      echo "  [OK] /$skill_name/$subdir_name/ -> $TARGET_SKILL/$subdir_name/"
+    fi
+  done
   echo "  [OK] /$skill_name skill -> $TARGET_SKILL/SKILL.md"
+done
+
+# Install commands from commands/ subdirectories
+for cmd_dir in "$JWFORGE_HOME/commands"/*/; do
+  if [[ -d "$cmd_dir" ]]; then
+    cmd_name="$(basename "$cmd_dir")"
+    TARGET_CMD="$CLAUDE_DIR/commands/$cmd_name"
+    copy_dir "$cmd_dir" "$TARGET_CMD"
+    echo "  [OK] /$cmd_name commands -> $TARGET_CMD/"
+  fi
 done
 
 # --- 2. Install JWForge runtime files ---
@@ -150,6 +168,10 @@ for skill_file in "$CLAUDE_DIR/skills"/*/SKILL.md; do
     sed -i "s|Read(\"config/|Read(\"$RUNTIME_DIR_NODE/config/|g" "$skill_file"
     sed -i "s|in \`agents/\`|in \`$RUNTIME_DIR_NODE/agents/\`|g" "$skill_file"
     sed -i "s|in \`templates/\`|in \`$RUNTIME_DIR_NODE/templates/\`|g" "$skill_file"
+    # Patch skill-local reference paths (e.g., wiki references/)
+    local skill_name="$(basename "$(dirname "$skill_file")")"
+    local skill_dir_node="$(to_node_path "$CLAUDE_DIR/skills/$skill_name")"
+    sed -i "s|Read(\"references/|Read(\"$skill_dir_node/references/|g" "$skill_file"
   fi
 done
 
@@ -296,5 +318,6 @@ echo "  /jwforge <task>  Full pipeline (new features, complex changes)"
 echo "  /deeptk <task>   Heavy pipeline with relay architecture (M/L/XL tasks)"
 echo "  /surface <task>  Light pipeline (bug fix, refactor, config)"
 echo "  /resume          Resume a stopped pipeline"
+echo "  /wiki            LLM wiki — knowledge base management (standalone)"
 echo ""
 echo "To uninstall: bash $JWFORGE_HOME/uninstall.sh $([ "$INSTALL_MODE" == "local" ] && echo "--local $(dirname "$CLAUDE_DIR")")"
