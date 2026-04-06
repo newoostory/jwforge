@@ -1,4 +1,4 @@
-You are a Wiki Sync agent. Your task is to manage git-based synchronization of the wiki to a remote.
+You are a Wiki Sync agent. Your task is to manage Syncthing-based synchronization of the wiki hub.
 
 The user has invoked `/wiki:sync` with:
 
@@ -6,7 +6,7 @@ $ARGUMENTS
 
 ## Step 1: Resolve Wiki
 
-Determine which wiki to operate on:
+Determine which wiki to operate on using this resolution order (check in order, stop at first match):
 
 1. `--local` flag in $ARGUMENTS → use `.wiki/` in the current working directory
 2. `--wiki <name>` flag in $ARGUMENTS → look up named wiki from `~/wiki/wikis.json`, use `~/wiki/topics/<name>/`
@@ -16,177 +16,166 @@ Determine which wiki to operate on:
 ## Step 2: Parse Arguments
 
 From $ARGUMENTS, extract the subcommand (one of):
-- `--setup` — initial sync configuration (git remote, cron registration)
-- `--status` — show current sync state
-- `--now` — execute sync immediately
-- `--log` — show recent sync log
+- `--setup` — configure Syncthing for this wiki directory
+- `--status` — show current Syncthing sync status
+- `--check` — verify Syncthing is running and the wiki folder is shared
+- `--ignore` — update Syncthing ignore patterns (.stignore)
 
-If no subcommand is provided, default to `--status`.
+If no subcommand is given, default to `--status`.
 
-## Step 3: Locate Sync Scripts
+## Step 3: Handle Subcommand
 
-The following files are used for sync. Check their existence before any operation:
-- `~/wiki/.sync-push.sh` — the sync execution script
-- `~/wiki/.sync-config.json` — sync configuration (remote, schedule, last run)
-- `~/wiki/.sync-log` — append-only sync log
+---
 
-## Step 4-A: Setup (`--setup`)
+### `--setup`
 
-### 4-A-1: Check prerequisites
+Guide the user through configuring Syncthing for the wiki directory.
 
-Verify:
-1. `~/wiki/` exists and is a git repository (`git -C ~/wiki rev-parse --git-dir`)
-2. If not a git repo: initialize with `git -C ~/wiki init`, then create an initial commit
+1. **Check if Syncthing is running:**
+   ```bash
+   systemctl --user is-active syncthing 2>/dev/null || systemctl is-active syncthing 2>/dev/null || pgrep -x syncthing >/dev/null
+   ```
+   If not running, report:
+   ```
+   Syncthing is not running. Start it with:
+     systemctl --user start syncthing
+   Or install from: https://syncthing.net/downloads/
+   ```
+   Stop here if not running.
 
-### 4-A-2: Configure remote
+2. **Check Syncthing API access:**
+   ```bash
+   curl -s -o /dev/null -w "%{http_code}" http://localhost:8384/rest/system/status
+   ```
+   If not reachable (not 200), report:
+   ```
+   Syncthing API not reachable at localhost:8384.
+   Check your Syncthing configuration or GUI address.
+   ```
 
-Ask the user:
-- "What is the git remote URL for sync?" (e.g. `git@github.com:user/wiki.git`)
+3. **Create `.stignore` file** at `<wiki-path>/.stignore` (create if not exists, append missing entries):
+   ```
+   // Syncthing ignore patterns for wiki
+   .obsidian/workspace.json
+   .obsidian/workspace-*.json
+   .obsidian/cache
+   .DS_Store
+   *.tmp
+   .sync-log
+   .sync-log.tmp
+   ```
 
-Add the remote:
-```bash
-git -C ~/wiki remote add origin <url>
-```
-If `origin` already exists, update it:
-```bash
-git -C ~/wiki remote set-url origin <url>
-```
+4. **Report to user with manual steps:**
+   ```
+   Wiki directory ready for Syncthing sync:
+   - Wiki path:  <wiki-path>
+   - .stignore:  <wiki-path>/.stignore (created/updated)
 
-### 4-A-3: Create .sync-push.sh
+   Next steps (in Syncthing Web UI at http://localhost:8384):
+   1. Add Folder → set path to: <wiki-path>
+   2. Set Folder Label to: wiki (or wiki-<topic>)
+   3. Share with your other devices
+   4. Set Folder Type to "Send & Receive"
 
-Create `~/wiki/.sync-push.sh` if it does not exist:
-```bash
-#!/usr/bin/env bash
-set -e
-cd ~/wiki
-git add -A
-git commit -m "wiki sync: $(date -u +%Y-%m-%dT%H:%M:%SZ)" || true
-git push origin master 2>&1
-echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] sync: push complete" >> ~/wiki/.sync-log
-```
-Make it executable: `chmod +x ~/wiki/.sync-push.sh`
+   Verify with: /wiki:sync --check
+   ```
 
-### 4-A-4: Create .sync-config.json
+---
 
-Write `~/wiki/.sync-config.json`:
-```json
-{
-  "remote": "<url>",
-  "branch": "master",
-  "schedule": "0 * * * *",
-  "setup_date": "<ISO date>"
-}
-```
+### `--status`
 
-### 4-A-5: Register cron job
+Show Syncthing sync status for the wiki directory.
 
-Register a cron job to run `.sync-push.sh` hourly:
-```
-0 * * * * ~/wiki/.sync-push.sh >> ~/wiki/.sync-log 2>&1
-```
-Add via `crontab -l | { cat; echo "0 * * * * ~/wiki/.sync-push.sh >> ~/wiki/.sync-log 2>&1"; } | crontab -`
+1. **Check Syncthing is running:**
+   ```bash
+   pgrep -x syncthing >/dev/null && echo "running" || echo "not running"
+   ```
 
-Skip if the cron entry already exists (check with `crontab -l | grep sync-push`).
+2. **Check if wiki path is a Syncthing shared folder:**
+   Try the Syncthing REST API:
+   ```bash
+   curl -s http://localhost:8384/rest/config/folders 2>/dev/null
+   ```
+   Parse the JSON response to find a folder with `path` matching `<wiki-path>`.
+
+3. **If folder found**, get its status:
+   ```bash
+   curl -s "http://localhost:8384/rest/db/status?folder=<folder-id>" 2>/dev/null
+   ```
+
+4. **Report:**
+   ```
+   Wiki Sync Status (Syncthing) — <date>
+
+   Wiki:        <wiki-path>
+   Syncthing:   running | not running
+   Shared:      yes (folder: <label>) | not configured
+
+   Sync state:  idle | syncing | error
+   Global:      <N> files, <size>
+   Local:       <N> files, <size>
+   Out of sync: <N> files | none
+
+   Connected devices: <N>
+   Last sync:   <timestamp> | never
+   ```
+
+   If Syncthing is not running or the folder is not configured:
+   ```
+   Syncthing is not configured for this wiki.
+   Run /wiki:sync --setup to configure.
+   ```
+
+---
+
+### `--check`
+
+Quick health check for Syncthing + wiki integration.
+
+1. Check Syncthing process is running
+2. Check `.stignore` exists at `<wiki-path>`
+3. Check the wiki folder is registered in Syncthing (via REST API)
+4. Check connected devices count
 
 Report:
 ```
-Sync configured.
-  Remote: <url>
-  Schedule: hourly (0 * * * *)
-  Script: ~/wiki/.sync-push.sh
+Wiki Sync Health Check
 
-Run /wiki:sync --now to push immediately.
+[OK|FAIL] Syncthing process running
+[OK|FAIL] .stignore file present
+[OK|FAIL] Wiki folder registered in Syncthing
+[OK|WARN] Connected devices: <N> (0 = no sync targets)
+
+Overall: healthy | needs attention
 ```
 
-## Step 4-B: Status (`--status`)
+---
 
-Read `~/wiki/.sync-config.json`. If it does not exist:
-```
-Sync not configured.
-Run /wiki:sync --setup to configure.
-```
+### `--ignore`
 
-If it exists, read and report:
-- Remote URL
-- Branch
-- Cron schedule
+Update the `.stignore` file with additional patterns.
 
-Read the last line of `~/wiki/.sync-log` (if it exists) to get last sync time.
+1. Read current `<wiki-path>/.stignore`
+2. If $ARGUMENTS contains patterns after `--ignore`, append them (skip duplicates)
+3. If no patterns given, show current `.stignore` contents and suggest common patterns:
+   ```
+   Current .stignore:
+   <contents>
 
-Check cron:
-```bash
-crontab -l 2>/dev/null | grep sync-push
-```
+   Suggested additions:
+   - *.pdf        (exclude PDFs from sync)
+   - raw/         (exclude raw sources, sync wiki/ only)
+   - .git/        (exclude git metadata)
+   ```
 
-Report:
-```
-Sync Status
-
-  Remote:    <url>
-  Branch:    <branch>
-  Schedule:  <cron expression>
-  Cron:      active | not scheduled
-  Last sync: <timestamp from .sync-log> | never
-
-Run /wiki:sync --now to push immediately.
-Run /wiki:sync --log to see full sync history.
-```
-
-## Step 4-C: Now (`--now`)
-
-### 4-C-1: Check prerequisites
-
-If `.sync-push.sh` does not exist:
-```
-Sync not configured. Run /wiki:sync --setup first.
-```
-Exit.
-
-### 4-C-2: Execute sync
-
-Run:
-```bash
-bash ~/wiki/.sync-push.sh
-```
-
-Capture output. Report success or failure:
-
-On success:
-```
-Sync complete.
-  Pushed to: <remote>
-  Time: <timestamp>
-```
-
-On failure:
-```
-Sync failed.
-  Error: <captured stderr>
-  Check ~/wiki/.sync-log for details.
-```
-
-## Step 4-D: Log (`--log`)
-
-Read `~/wiki/.sync-log`. If it does not exist:
-```
-No sync log found. Run /wiki:sync --now to create the first entry.
-```
-
-Display the last 20 lines of the log:
-```
-Recent sync log (~/wiki/.sync-log):
-
-[2026-04-05T14:00:01Z] sync: push complete
-[2026-04-05T13:00:01Z] sync: push complete
-...
-```
+---
 
 ## Rules
 
-- This command uses **git push** for sync — not Syncthing, rsync, or other protocols.
-- Never force-push (`--force`). If push fails due to diverged history, report the error and ask the user to resolve manually.
-- `.sync-push.sh` commits all changes with an auto-generated message. Do not create custom commit messages in this flow.
-- `--setup` is idempotent: re-running it updates config but does not duplicate cron entries.
-- Always check that `~/wiki/` is a git repo before any git operations. Initialize if needed.
-- `--now` runs synchronously and reports the result inline.
-- Do not read or expose the contents of `.gitignore`, SSH keys, or any credential files.
+- **Syncthing-based**: this command manages Syncthing configuration for wiki sync. No git-push, no rsync.
+- **Non-destructive**: never delete or overwrite existing Syncthing configuration. Only add/update.
+- **`.stignore` is append-only**: never remove existing entries from `.stignore`. Only add missing patterns.
+- **Obsidian-safe**: always exclude workspace state files from sync.
+- **API access**: use Syncthing REST API at `http://localhost:8384` for status checks. If API key is required, prompt the user to provide it or set `SYNCTHING_API_KEY` env variable.
+- **Manual folder setup**: Syncthing folder registration is done through the Web UI (not automated via API) for safety. The `--setup` command prepares the directory and guides the user.
+- **Bidirectional sync**: Syncthing syncs bidirectionally by default ("Send & Receive"). This is the recommended mode for wiki directories.

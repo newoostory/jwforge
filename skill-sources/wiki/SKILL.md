@@ -152,15 +152,15 @@ Discover and insert cross-reference wikilinks between wiki articles (bidirection
 
 ---
 
-## `/wiki sync [--setup|--now|--status|--log]`
+## `/wiki sync [--setup|--status|--check|--ignore]`
 
-Git-push based one-way sync to a remote repository.
+Syncthing-based multi-device sync for wiki directories.
 
-1. `--setup`: Initialize git repo in wiki directory, configure remote, create `.sync-push.sh` script, set up `.gitignore`
-2. `--now`: Execute `.sync-push.sh` (git add -A, commit with timestamp, push to origin)
-3. `--status`: Show remote info, working tree state, last sync timestamp
-4. `--log`: Display recent sync log entries from `.sync-log`
-5. Log: `## [YYYY-MM-DD] sync | Pushed to <remote>, N files synced`
+1. `--setup`: Create `.stignore`, guide Syncthing Web UI folder registration
+2. `--status`: Show Syncthing sync state, connected devices, out-of-sync files
+3. `--check`: Quick health check (process, .stignore, folder registered, devices)
+4. `--ignore`: Update `.stignore` patterns
+5. Log: `## [YYYY-MM-DD] sync | Syncthing status: <state>, <N> devices connected`
 
 ---
 
@@ -268,7 +268,7 @@ These are available as separate command files (`/wiki:<name>`):
 | `/wiki:init` | Create a new topic wiki with full directory structure |
 | `/wiki:status` | Show wiki hub overview, topic counts, local wiki status |
 | `/wiki:link` | Discover and insert cross-reference wikilinks between articles |
-| `/wiki:sync` | Git-push based one-way sync to remote repository |
+| `/wiki:sync` | Syncthing-based multi-device sync |
 | `/wiki:ingest` | Ingest URLs, files, text, inbox items into `raw/` |
 | `/wiki:compile` | Compile raw sources into wiki articles |
 | `/wiki:query` | Query wiki with citations (quick/standard/deep) |
