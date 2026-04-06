@@ -169,9 +169,17 @@ for skill_file in "$CLAUDE_DIR/skills"/*/SKILL.md; do
     sed -i "s|in \`agents/\`|in \`$RUNTIME_DIR_NODE/agents/\`|g" "$skill_file"
     sed -i "s|in \`templates/\`|in \`$RUNTIME_DIR_NODE/templates/\`|g" "$skill_file"
     # Patch skill-local reference paths (e.g., wiki references/)
-    local skill_name="$(basename "$(dirname "$skill_file")")"
-    local skill_dir_node="$(to_node_path "$CLAUDE_DIR/skills/$skill_name")"
-    sed -i "s|Read(\"references/|Read(\"$skill_dir_node/references/|g" "$skill_file"
+    _skill_name="$(basename "$(dirname "$skill_file")")"
+    _skill_dir_node="$(to_node_path "$CLAUDE_DIR/skills/$_skill_name")"
+    sed -i "s|Read(\"references/|Read(\"$_skill_dir_node/references/|g" "$skill_file"
+  fi
+done
+
+# Patch <JWFORGE_HOME> placeholders in installed command files
+for cmd_file in "$CLAUDE_DIR/commands"/wiki/*.md; do
+  if [[ -f "$cmd_file" ]]; then
+    _wiki_skill_dir="$(to_node_path "$CLAUDE_DIR/skills/wiki")"
+    sed -i "s|<JWFORGE_HOME>/skills/wiki/references/|$_wiki_skill_dir/references/|g" "$cmd_file"
   fi
 done
 
