@@ -138,28 +138,29 @@ Read("references/wiki-structure.md")
 
 ---
 
-## `/wiki link <path>`
+## `/wiki link [--scan|--update]`
 
-Register an existing wiki directory (local or external) in the hub.
+Discover and insert cross-reference wikilinks between wiki articles (bidirectional).
 
-1. Verify the target path exists and has a valid wiki structure (`_index.md`, `config.md`, `raw/`, `wiki/`)
-2. Read the target's `config.md` for title and description
-3. Add to `~/wiki/wikis.json` under `local_wikis` (for absolute paths) or `wikis` (for hub-relative)
-4. Update `~/wiki/_index.md` with the new entry
-5. Log: `## [YYYY-MM-DD] link | Linked <path> as "<title>"`
+1. Resolve the active wiki (hub or local)
+2. Read `wiki/_index.md` to collect all known article titles and paths
+3. Scan all wiki articles for potential cross-references (title mentions, keyword overlaps)
+4. Discover bidirectional link candidates: if A mentions B, also check if B should link to A
+5. `--scan` (default): dry-run — report candidates without modifying files
+6. `--update`: insert dual-format links `[[Title]](relative/path.md)` and append/update `## See Also` sections
+7. Log: `## [YYYY-MM-DD] link | Scanned/Updated N articles, M links added`
 
 ---
 
-## `/wiki sync`
+## `/wiki sync [--setup|--now|--status|--log]`
 
-One-way pull sync from a remote wiki via Tailscale + rsync.
+Git-push based one-way sync to a remote repository.
 
-1. Read `~/wiki/wikis.json` to find the remote sync config (or accept `--from <host>`)
-2. Verify Tailscale connectivity: `tailscale status` must show the target host
-3. Run `rsync -avz --delete <remote>:~/wiki/ ~/wiki/` (or the configured remote path)
-4. After sync, run a quick structural lint (C1 checks only) to verify integrity
-5. Update indexes if new content was pulled
-6. Log: `## [YYYY-MM-DD] sync | Pulled from <remote>, N files updated`
+1. `--setup`: Initialize git repo in wiki directory, configure remote, create `.sync-push.sh` script, set up `.gitignore`
+2. `--now`: Execute `.sync-push.sh` (git add -A, commit with timestamp, push to origin)
+3. `--status`: Show remote info, working tree state, last sync timestamp
+4. `--log`: Display recent sync log entries from `.sync-log`
+5. Log: `## [YYYY-MM-DD] sync | Pushed to <remote>, N files synced`
 
 ---
 
@@ -266,8 +267,8 @@ These are available as separate command files (`/wiki:<name>`):
 |---------|---------|
 | `/wiki:init` | Create a new topic wiki with full directory structure |
 | `/wiki:status` | Show wiki hub overview, topic counts, local wiki status |
-| `/wiki:link` | Register an existing wiki directory in the hub |
-| `/wiki:sync` | One-way pull sync from remote wiki via Tailscale + rsync |
+| `/wiki:link` | Discover and insert cross-reference wikilinks between articles |
+| `/wiki:sync` | Git-push based one-way sync to remote repository |
 | `/wiki:ingest` | Ingest URLs, files, text, inbox items into `raw/` |
 | `/wiki:compile` | Compile raw sources into wiki articles |
 | `/wiki:query` | Query wiki with citations (quick/standard/deep) |
