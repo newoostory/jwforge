@@ -111,29 +111,24 @@ When any `/wiki` command runs, resolve which wiki to use:
 
 ```json
 {
-  "wikis": [
-    {
-      "name": "<topic>",
-      "title": "<Human-readable title>",
-      "path": "~/wiki/topics/<topic>",
-      "created": "<ISO date>",
-      "tags": []
-    }
+  "default": "~/wiki",
+  "wikis": {
+    "main": { "path": "~/wiki", "description": "Global knowledge base" },
+    "<topic>": { "path": "~/wiki/topics/<topic>", "description": "..." }
+  },
+  "local_wikis": [
+    { "path": "/absolute/path/.wiki", "description": "..." }
   ]
 }
 ```
-
-Each entry is appended when `/wiki init <topic>` runs. Do not duplicate entries with the same `name`.
 
 ### `config.md` Frontmatter
 
 ```yaml
 ---
 title: "Wiki Title"
-topic: "<topic-slug>"
+description: "What this wiki is about"
 created: YYYY-MM-DD
-scope: "What this wiki covers"
-conventions: "Project-specific naming or style rules"
 ---
 ```
 
@@ -305,7 +300,7 @@ Useful for: `grep "^## \[" log.md | tail -10` to see recent activity.
 [Synthesized content — explain, contextualize, connect. NOT copy-paste from sources.]
 
 When referencing another wiki article inline, use dual-link format:
-[[article-slug|Display Name]] ([Display Name](../category/article-slug.md))
+[[Article Name]] [Article Name](relative/path.md)
 
 ## See Also
 

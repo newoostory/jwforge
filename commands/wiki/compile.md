@@ -28,6 +28,8 @@ From $ARGUMENTS, extract:
   - `--all` — recompile everything, including already-compiled articles
   - `--dry-run` — preview which sources would be compiled, write nothing
   - `--category <name>` — limit to one raw category (articles/papers/repos/notes/data)
+  - `--code` — code structure document auto-generation mode
+  - `--auto` — cron unattended execution mode
 
 ## Step 4: Identify Uncompiled Sources
 
@@ -63,7 +65,56 @@ For each uncompiled raw source:
    - Add `[[wikilink]]` and `[text](relative/path)` dual-links for related articles
    - Include a `## Sources` section at the bottom listing raw sources used
    - Confidence scoring: `high` = multiple corroborating sources, `medium` = single reliable source, `low` = single weak/unverified source
-6. Track compilation in wiki `_index.md` by adding the raw source path to a `compiled_sources` list (raw/ files are immutable — never edit them)
+6. Update the raw source's frontmatter: set `status: compiled`
+
+## Step 5-C: Code Structure Auto-Generation (`--code`)
+
+When `--code` is set, scan the project's source files and generate or update structure documents in `wiki/references/`.
+
+1. Detect the project root (current directory or the wiki's associated repo if configured in `config.md`)
+2. Identify language and framework:
+   - Read `package.json`, `Cargo.toml`, `go.mod`, `pyproject.toml`, `requirements.txt`, or equivalent
+   - Read entry point files (main.*, index.*, app.*, cli.*)
+3. Scan source directories (skip node_modules, .git, dist, build, __pycache__):
+   - List top-level directories and their purpose
+   - Identify module boundaries (directories with index files, package declarations, or explicit exports)
+   - Detect entry points (executables, exported APIs, CLI commands)
+4. Generate or update `wiki/references/code-structure.md`:
+   ```yaml
+   ---
+   title: Code Structure
+   category: references
+   generated: <ISO date>
+   language: <detected>
+   framework: <detected>
+   entry_points: [<list>]
+   ---
+   ```
+   Body sections:
+   - **Language & Framework**: detected stack summary
+   - **Entry Points**: executables, CLI commands, exported APIs with file paths
+   - **Module Map**: top-level directories with one-line descriptions
+   - **Module Boundaries**: package/module boundaries with exported symbols
+   - **Dependencies**: key external dependencies and their purpose
+5. Update `wiki/_index.md` and `wiki/references/_index.md`
+6. Append to `log.md`:
+   ```
+   [<date>] compile --code: code structure document generated/updated
+   ```
+
+## Step 5-A: Cron Unattended Mode (`--auto`)
+
+When `--auto` is set, run compilation without any interactive prompts.
+
+1. Check `inbox/` for pending items — process all without asking
+2. Compile all uncompiled sources without confirmation
+3. Skip any operation that would normally require user input; log skipped items instead
+4. On any error: log the error to `log.md` and continue to the next item (do not stop)
+5. Write all results to `log.md` with timestamp:
+   ```
+   [<date>] compile --auto: <N> compiled, <N> skipped, <N> errors — see details below
+   ```
+6. Output a machine-readable summary at the end (no interactive prompts)
 
 ## Step 6: Update Indexes
 
@@ -93,3 +144,5 @@ Next: run /wiki:lint to check article health
 - Never hallucinate. If you cannot confidently synthesize, write what you know and mark confidence `low`.
 - Prefer merging into existing articles over creating duplicates.
 - Every article must have frontmatter and a `## Sources` section.
+- `--auto` mode must never block on user input. Log and continue on errors.
+- `--code` mode scans only source files; never reads secrets, .env files, or credentials.

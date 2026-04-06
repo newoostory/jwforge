@@ -26,7 +26,7 @@ From $ARGUMENTS, extract:
 - **Sources**: URLs, file paths, inline text, or `--inbox` flag
 - **Target wiki** (resolved above)
 - **Category hint**: `--articles`, `--papers`, `--repos`, `--notes`, `--data` (default: auto-detect)
-- **Flags**: `--dry-run` (preview only, no writes), `--force` (re-ingest already-processed sources)
+- **Flags**: `--dry-run` (preview only, no writes), `--force` (re-ingest already-processed sources), `--explain` (study-note mode)
 
 If $ARGUMENTS is empty, check `inbox/` for pending items. If inbox is also empty, tell the user what types of sources are accepted and exit.
 
@@ -63,6 +63,20 @@ For each source:
 1. List files in `inbox/` (skip `inbox/.processed/`)
 2. For each file: ingest it, then move to `inbox/.processed/`
 
+### Study-note mode (`--explain`)
+When `--explain` is set, the user is providing their own explanation of a concept rather than an external source.
+
+1. Treat $ARGUMENTS (after stripping `--explain`) as the user's inline explanation text
+2. Prompt the user: "What concept are you explaining?" if the topic is not obvious from the text
+3. Generate a slug from the concept name
+4. Auto-format into a wiki article with:
+   - Proper YAML frontmatter (title, category: notes, source_type: personal-note, ingested date, status: raw, tags: [])
+   - The user's explanation as the article body, lightly formatted (headings, bullets as appropriate)
+   - Auto-detect and insert `[[wikilink]]` cross-links to related concepts already in the wiki
+   - Add a `## Keywords` section with extracted key terms
+5. Write to `raw/notes/<slug>.md`
+6. Source type in frontmatter: `personal-note`
+
 ## Step 5: Update Indexes
 
 After all sources are ingested:
@@ -90,3 +104,4 @@ Next: run /wiki:compile to process into wiki articles
 - Never hallucinate content. If a URL fails to fetch, report the error and skip.
 - Maintain consistent frontmatter on every raw file.
 - If `--dry-run` is set, print what would be ingested but write nothing.
+- For `--explain` mode: the user's voice and framing must be preserved. Do not rewrite their explanation; only structure and cross-link it.

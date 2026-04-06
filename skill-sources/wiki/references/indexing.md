@@ -78,7 +78,7 @@ Indexes MUST be updated whenever:
 
 1. Update master `_index.md`:
    - Set "Last lint" to today's date
-   - Add entry to Recent Changes (e.g., `N checks, 0 critical, 2 warnings`)
+   - Add entry to Recent Changes (e.g., `N checks, N critical, N warnings`)
 
 ### After output generation
 

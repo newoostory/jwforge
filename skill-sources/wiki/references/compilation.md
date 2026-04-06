@@ -19,6 +19,75 @@ Compilation is the core "LLM compiler" operation: read raw sources and produce s
 
 ---
 
+## Special Flags
+
+### `--code` — Code Structure Auto-Documentation
+
+When `--code` is passed, compilation additionally generates code structure documentation:
+
+1. Scan the project directory (or specified path) for source files
+2. Extract: module hierarchy, public APIs, key classes/functions, dependency graph
+3. Write a wiki article in `wiki/references/` with:
+   - Module-by-module breakdown with purpose descriptions
+   - Key entry points and their call chains
+   - Configuration and environment dependencies
+   - Frontmatter: `category: reference`, `sources: [project path]`, `confidence: high`
+4. Update on subsequent `--code` runs (incremental by default, `--full` for complete rescan)
+
+This is for documenting the codebase itself as a wiki reference — the wiki becomes self-aware of its project's code structure.
+
+### `--auto` — Cron Unattended Mode
+
+When `--auto` is passed, compilation runs in fully unattended mode for cron-triggered execution:
+
+1. No user interaction — all decisions are automatic
+2. Use incremental mode (never `--full` in auto mode unless explicitly scheduled)
+3. Skip compilation nudges and suggestions
+4. Write results silently — only log to `log.md`
+5. If errors occur, append to `log.md` with `[ERROR]` prefix rather than prompting
+6. Exit cleanly regardless of outcome
+
+Designed for use with the agent trigger (see SKILL.md Agent Trigger section).
+
+---
+
+## Output Artifacts
+
+Every compilation produces up to 4 types of output artifacts:
+
+### (a) Summary — Textbook-style synthesis
+
+The primary output. Each wiki article is a self-contained textbook entry that:
+- Synthesizes information from multiple raw sources
+- Explains concepts in context, not as isolated facts
+- Builds on existing wiki articles through cross-references
+- Written for a knowledgeable reader, not dumbed down
+
+### (b) Keywords — Extracted key terms
+
+For each compiled article, extract and store keywords in frontmatter `tags`:
+- Technical terms, named entities, acronyms
+- Normalized to the wiki's tag convention (lowercase, hyphenated)
+- Used by search, query, and lint for discoverability
+
+### (c) Cross-links — Wikilinks between articles
+
+Bidirectional links generated during compilation:
+- Every new article must link to at least one existing article via "See Also"
+- Every referenced article gets a backlink added
+- Format: `[[slug|Name]] ([Name](../category/slug.md))` (dual-link convention)
+- Links express relationships: "extends", "contrasts with", "is a component of", etc.
+
+### (d) Source/Confidence Metadata
+
+Each article carries provenance metadata in frontmatter:
+- `sources`: list of raw source file paths that contributed
+- `confidence`: high/medium/low based on source agreement and authority
+- `created` / `updated`: temporal tracking for staleness detection
+- This metadata powers lint checks (C6: Coverage) and query confidence reporting
+
+---
+
 ## The Compilation Loop
 
 ### Step 1: Survey

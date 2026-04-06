@@ -2,7 +2,7 @@
 name: wiki
 description: "LLM-compiled knowledge base manager. Activates for wiki directories, /wiki commands, or keywords like wiki, knowledge base, ingest, compile wiki."
 user-invocable: true
-argument-hint: "[init <topic> [--local]] | [status]"
+argument-hint: "[init <topic> [--local]] | [status] | [link <path>] | [sync]"
 allowed-tools: Bash, Read, Write, Edit, Glob, Grep, WebFetch, WebSearch, Agent
 ---
 
@@ -138,6 +138,31 @@ Read("references/wiki-structure.md")
 
 ---
 
+## `/wiki link <path>`
+
+Register an existing wiki directory (local or external) in the hub.
+
+1. Verify the target path exists and has a valid wiki structure (`_index.md`, `config.md`, `raw/`, `wiki/`)
+2. Read the target's `config.md` for title and description
+3. Add to `~/wiki/wikis.json` under `local_wikis` (for absolute paths) or `wikis` (for hub-relative)
+4. Update `~/wiki/_index.md` with the new entry
+5. Log: `## [YYYY-MM-DD] link | Linked <path> as "<title>"`
+
+---
+
+## `/wiki sync`
+
+One-way pull sync from a remote wiki via Tailscale + rsync.
+
+1. Read `~/wiki/wikis.json` to find the remote sync config (or accept `--from <host>`)
+2. Verify Tailscale connectivity: `tailscale status` must show the target host
+3. Run `rsync -avz --delete <remote>:~/wiki/ ~/wiki/` (or the configured remote path)
+4. After sync, run a quick structural lint (C1 checks only) to verify integrity
+5. Update indexes if new content was pulled
+6. Log: `## [YYYY-MM-DD] sync | Pulled from <remote>, N files updated`
+
+---
+
 ## Core Principles
 
 1. **Index-first navigation** -- Always read `_index.md` before scanning directories. Indexes contain summaries, tags, and file lists. Never use Glob to discover content when an index exists.
@@ -146,14 +171,18 @@ Read("references/wiki-structure.md")
 
 3. **Synthesized articles** -- Wiki articles draw from multiple sources, contextualize, and cross-reference. They are textbook entries, not copies.
 
-4. **Dual-linking** -- Every cross-reference uses both formats on the same line:
+4. **Token efficiency** -- 정리된 요약/인덱스를 우선 참조. raw는 차단하지 않으나, 토큰 절약을 위해 불가피할 때만 참조. compile은 당연히 raw 읽어서 처리. Always prefer reading `_index.md` summaries over full articles, and full articles over raw sources. The 3-hop strategy exists to minimize token consumption.
+
+5. **Dual-linking** -- Every cross-reference uses both formats on the same line:
    `[[Article Name]] [Article Name](relative/path.md)`
 
-5. **Structured frontmatter** -- Every `.md` file has YAML frontmatter with at minimum: `title`, `created`, `tags`. Articles add `summary`, `sources`, `confidence`.
+6. **Structured frontmatter** -- Every `.md` file has YAML frontmatter with at minimum: `title`, `created`, `tags`. Articles add `summary`, `sources`, `confidence`.
 
-6. **Incremental compilation** -- Only process new/uncompiled sources by default. Use `--full` flag for full recompilation.
+7. **Incremental compilation** -- Only process new/uncompiled sources by default. Use `--full` flag for full recompilation.
 
-7. **Honest gaps** -- Never fabricate information. State when the wiki lacks an answer. Note confidence levels.
+8. **Honest gaps** -- Never fabricate information. State when the wiki lacks an answer. Note confidence levels.
+
+9. **Code structure auto-documentation (D4)** -- When a wiki covers a software project, maintain a `wiki/references/code-structure.md` article that documents the project's architecture, key modules, entry points, and dependency graph. This article is auto-generated/updated by `/wiki:compile --code` and serves as the canonical code map for the wiki.
 
 ---
 
@@ -166,6 +195,24 @@ Articles include `confidence` in frontmatter: **high** (multiple authoritative s
 ## Activity Logging
 
 All operations append to `log.md`: `## [YYYY-MM-DD] operation | Description` with details. Entries are append-only -- never modify existing entries.
+
+---
+
+## Agent Trigger (Automated Compilation)
+
+Wiki compilation can run unattended on a schedule via cron:
+
+```bash
+# Example crontab entry — compile wiki every 6 hours
+0 */6 * * * flock -n /tmp/wiki-agent.lock claude --print --prompt "/wiki:compile --auto" 2>/dev/null
+```
+
+- `flock /tmp/wiki-agent.lock` prevents concurrent sessions from colliding
+- `claude --print --prompt` runs non-interactively and outputs to stdout
+- `--auto` flag on `/wiki:compile` enables unattended mode (no interactive questions, auto-accept defaults)
+- Cron output can be redirected to a log file for monitoring
+
+This enables the wiki to stay continuously compiled as new sources are ingested, without requiring manual intervention.
 
 ---
 
@@ -217,6 +264,10 @@ These are available as separate command files (`/wiki:<name>`):
 
 | Command | Purpose |
 |---------|---------|
+| `/wiki:init` | Create a new topic wiki with full directory structure |
+| `/wiki:status` | Show wiki hub overview, topic counts, local wiki status |
+| `/wiki:link` | Register an existing wiki directory in the hub |
+| `/wiki:sync` | One-way pull sync from remote wiki via Tailscale + rsync |
 | `/wiki:ingest` | Ingest URLs, files, text, inbox items into `raw/` |
 | `/wiki:compile` | Compile raw sources into wiki articles |
 | `/wiki:query` | Query wiki with citations (quick/standard/deep) |

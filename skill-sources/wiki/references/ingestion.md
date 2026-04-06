@@ -22,6 +22,26 @@ Ingestion converts external material into a standardized raw source file in `raw
 
 ---
 
+## Special Flags
+
+### `--explain` — Study-Note Mode
+
+When `--explain` is passed, ingestion enters study-note mode:
+
+1. The user explains what they learned in their own words (freeform text as the argument)
+2. Instead of treating the text as a raw source to preserve verbatim, the system:
+   - Structures the user's explanation into a well-organized note
+   - Identifies key concepts mentioned and links them to existing wiki articles
+   - Fills in minor gaps or corrects obvious misstatements (with `[editor note: ...]` markers)
+   - Preserves the user's voice and phrasing — this is their understanding, not a rewrite
+3. The resulting file is saved to `raw/notes/` with `source: EXPLAIN` in frontmatter
+4. Tags are auto-generated from the concepts mentioned
+5. If the explanation covers topics with existing wiki articles, suggest running `/wiki:compile` to integrate the new perspective
+
+This mode is designed for active learning — the user teaches the wiki what they know, and the wiki helps them organize and connect that knowledge. Confidence is always `low` until corroborated by other sources during compilation.
+
+---
+
 ## URL Ingestion
 
 ### Step 1 — Tweet detection
@@ -106,7 +126,7 @@ Write to `raw/{type}/YYYY-MM-DD-slug.md` with this structure:
 ```yaml
 ---
 title: "Title"
-source: "URL or filepath or MANUAL"
+source: "URL or filepath or MANUAL or EXPLAIN"
 type: articles|papers|repos|notes|data
 ingested: YYYY-MM-DD
 tags: [tag1, tag2]
