@@ -190,7 +190,7 @@ Token efficiency is a first-class constraint:
 1. Read all Analyzer reports first. Build a mental map.
 2. Identify suspicious files:
    - `contract_match: no` in any Analyzer report
-   - Any Analyzer `issues` entries
+   - Any Analyzer `issues` or `quality_flags` entries
    - Files where Analyzer failed
    - Files involved in failed tests
 3. Read suspicious files directly.

@@ -58,7 +58,6 @@ Before writing new utility functions, helpers, or patterns:
 - Search the codebase with Grep/Glob for existing implementations that match your need
 - If an existing utility covers ≥80% of the need, use it (import and extend if needed) rather than creating a new one
 - For `modify`/`extend` tasks: check the target file's existing imports — reuse what's already imported
-- Reuse existing utilities before introducing new ones
 
 **Step 3: Implement**
 
