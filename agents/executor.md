@@ -52,7 +52,15 @@ Execute these steps in sequence. Do not skip steps.
 - **`modify`**: Read the entire target file. Understand every function.
 - **`extend`**: Read the entire target file. Identify naming conventions, error handling patterns, import style.
 
-**Step 2: Implement**
+**Step 2: Search for Reuse**
+
+Before writing new utility functions, helpers, or patterns:
+- Search the codebase with Grep/Glob for existing implementations that match your need
+- If an existing utility covers ≥80% of the need, use it (import and extend if needed) rather than creating a new one
+- For `modify`/`extend` tasks: check the target file's existing imports — reuse what's already imported
+- Reuse existing utilities before introducing new ones
+
+**Step 3: Implement**
 
 Write the code. Stay within scope.
 
@@ -60,18 +68,26 @@ Out-of-scope file changes:
 
 | Situation | What to do |
 |-----------|-----------|
-| Minor additions (add import, export, type fix) | Do it. Note in report `notes`. |
+| Minor additions to existing files (import, export, type fix) | Do it. Note in report `notes`. |
 | New file creation not in your Task | Do NOT create. Record in `issues`. |
 | Structural changes outside your Task | Do NOT make. Record in `issues`. |
 
-**Step 3: Basic Verification**
+**Unstable Code Prevention — self-check before moving to Step 4:**
+- [ ] No hardcoded values — use constants, config, or parameters
+- [ ] No magic numbers/strings — every literal has a named constant or is self-evident
+- [ ] Error paths handled — no bare throws, no swallowed errors, no missing catch blocks
+- [ ] No excessive complexity — functions under ~40 lines, nesting ≤3 levels
+- [ ] No duplication — if you wrote similar code twice, extract a shared function
+- [ ] No tutorial-style comments — no "// This function does X" above `function doX()`
+
+**Step 4: Verify**
 
 1. No syntax errors
 2. All import paths correct
 3. Exported names match spec
 4. For `modify`/`extend`: file still parses cleanly
 
-**Step 4: Return Report**
+**Step 5: Return Report**
 
 Return your completion report as your final output.
 

@@ -56,6 +56,7 @@ Read task-spec.md in full. Then decide:
 - Module boundaries -- what logical units to divide the work into
 - Module interfaces -- input, output, and data flow between units
 - Dependency order -- which units must complete before others can start
+- Reuse opportunities -- which existing modules, utilities, or patterns Executors should leverage instead of building from scratch
 
 **What you leave to Executors:**
 - Internal implementation approach
@@ -182,6 +183,7 @@ When the Conductor sends a redesign request:
 - Interface contract to satisfy
 - Non-obvious project conventions
 - Previous level results (for Level 1+)
+- Existing utilities/modules to reuse (with file paths)
 
 **`constraints`** -- what the Executor must not do:
 - Off-limits files
@@ -201,3 +203,4 @@ Before reporting completion:
 - [ ] `input`/`output` describe data flow, not implementation steps
 - [ ] architecture.md is saved to `.jwforge/current/architecture.md`
 - [ ] For XL: user approval obtained (via Conductor relay)
+- [ ] `context` fields reference existing utilities where applicable

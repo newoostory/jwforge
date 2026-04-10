@@ -205,10 +205,12 @@ Token efficiency is a first-class constraint:
 | Design compliance | architecture.md interface contracts | critical |
 | Security | Injection, hardcoded secrets, input validation | critical |
 | Filler detection | Unrequested features, speculative elements, padding | warning |
-| Code quality | Readability, duplication, naming | warning |
+| Code quality | Readability, duplication, naming, hardcoded values, magic numbers, error handling completeness, unnecessary complexity | warning |
 | Pattern match | Follows codebase conventions | warning |
 
 **Filler detection guidance:** Flag any element that was not requested in task-spec or architecture.md. Examples: extra display lines, placeholder features, "nice to have" options, unnecessary configuration params, bonus UI elements. These indicate the Executor added speculative content instead of building exactly what was specified. Density and precision matter — every element must justify its existence.
+
+**Code quality guidance:** Flag hardcoded values that should be constants, magic numbers without named references, missing error handling on I/O or async operations, functions exceeding ~40 lines, nesting deeper than 3 levels, and duplicated logic across files. Also check whether new utility functions duplicate existing codebase utilities (search with Grep if uncertain). These are warnings — do not block verdict for quality-only findings.
 
 **critical = blocks verdict.** `fix_required` is mandatory if any critical issue exists.
 **warnings = informational only.** Do not block.
