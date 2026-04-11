@@ -64,7 +64,8 @@ const SAFE_PATTERNS = [
 
 // Check if all file targets in a command are pipeline artifacts
 function isWritingToPipelineArtifact(command, cwd) {
-  const commandFiles = command.match(/[\w./-]+\.\w{1,5}/g) || [];
+  const rawMatches = [...command.matchAll(/(?:^|[\s"'=])([.\w][\w./-]*\.\w{1,5})(?=[\s"';)|]|$)/g)].map(m => m[1]);
+  const commandFiles = rawMatches.filter(f => !/\.(tar\.\w+|min\.js|min\.css)$/i.test(f));
   if (commandFiles.length === 0) return false;
   return commandFiles.every(f => isPipelineArtifact(f, cwd));
 }

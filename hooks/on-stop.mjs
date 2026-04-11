@@ -6,9 +6,8 @@
  * Fires on session end. Handles:
  * 1. Archive pipeline artifacts to .jwforge/archive/{timestamp}-{slug}/
  * 2. Record commit hash range in archive metadata
- * 3. Set state.status to "stopped" with timestamp and reason
- * 4. Remove pipeline lock file (pipeline-required.json)
- * 5. Clean up transient files from current/
+ * 3. Remove pipeline lock file (pipeline-required.json)
+ * 4. Clean up transient files from current/
  *
  * Always returns { continue: true } -- stop hooks must never block.
  */
@@ -105,28 +104,17 @@ async function main() {
     // 1. Archive before any cleanup (captures current state)
     archivePipeline(cwd, state);
 
-    // 2. Update state to stopped (only if still in progress)
-    if (state.status === 'in_progress') {
-      state.status = 'stopped';
-      state.stopped_at = new Date().toISOString();
-      state.stop_reason = 'session_end';
-    }
-    writeFileSync(
-      join(cwd, JWFORGE_DIR, 'current', 'state.json'),
-      JSON.stringify(state, null, 2),
-    );
-
-    // 3. Remove pipeline lock
+    // 2. Remove pipeline lock
     const lockPath = join(cwd, JWFORGE_DIR, 'current', 'pipeline-required.json');
     if (existsSync(lockPath)) unlinkSync(lockPath);
 
-    // 4. Remove transient files from current/
+    // 3. Remove transient files from current/
     for (const f of TRANSIENT_FILES) {
       const p = join(cwd, JWFORGE_DIR, 'current', f);
       if (existsSync(p)) unlinkSync(p);
     }
 
-    // 5. Clean up team directory if it exists
+    // 4. Clean up team directory if it exists
     const homeDir = process.env.HOME || process.env.USERPROFILE;
     if (state.team_name && homeDir) {
       const teamDir = join(homeDir, '.claude', 'teams', state.team_name);

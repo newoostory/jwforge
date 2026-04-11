@@ -18,14 +18,14 @@ import { join } from 'path';
 import { readStdin, getCwd, readState, ALLOW, ALLOW_MSG, BLOCK, JWFORGE_DIR } from './lib/common.mjs';
 
 const VALID_STEPS = {
-  deep: ['1-1','1-2','1-3','1-3b','1-4','1-5','1-5b','1-6',
+  deep: ['1-1','1-2','1-3','1-3b','1-4','1-5','1-5b','1-6','1-6a','1-6b',
          '2-1','2-2','2-2b',
          '3-1','3-2','3-2b','3-3','3-4','3-5','3-6','3-7',
-         '4-1','4-2','4-3','4-4','4-5','4-6'],
-  deeptk: ['1-1','1-2','1-2a','1-2b','1-2c','1-3','1-4','1-5','1-6',
+         '4-1','4-2','4-3','4-3a','4-4','4-5','4-6','4-7'],
+  deeptk: ['1-1','1-2','1-2a','1-2b','1-2c','1-3','1-4','1-5','1-6','1-6a','1-6b',
            '2-1','2-2','2-3','2-4','2-5',
            '3-1','3-2','3-3','3-4','3-5',
-           '4-1','4-2','4-3','4-4','4-5','4-6'],
+           '4-1','4-1b','4-2','4-3','4-3a','4-3b','4-4','4-5','4-6','4-7'],
   surface: ['analyze','plan','implement','verify']
 };
 
@@ -163,13 +163,13 @@ async function main() {
       }
     }
 
-    // === RULE 7: Step whitelist validation (warn, not block) ===
+    // === RULE 7: Step whitelist validation ===
     const newStep = newState.step;
     if (newStep && typeof newStep === 'string') {
       const pipeline = newState.pipeline || currentState.pipeline;
       const allowedSteps = VALID_STEPS[pipeline];
       if (allowedSteps && !allowedSteps.includes(newStep)) {
-        console.log(ALLOW_MSG(`[JWForge State Validator] WARNING: Unrecognized step "${newStep}" for pipeline "${pipeline}". Known steps: ${allowedSteps.join(', ')}.`));
+        console.log(BLOCK(`[JWForge State Validator] BLOCKED: Unrecognized step "${newStep}" for pipeline "${pipeline}". Valid steps: ${allowedSteps.join(', ')}.`));
         return;
       }
     }

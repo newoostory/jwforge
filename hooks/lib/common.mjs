@@ -28,6 +28,12 @@ export function ALLOW_MSG(message) {
   return JSON.stringify({ continue: true, message });
 }
 
+// --- Error Logger ---
+
+export function logHookError(hookName, error) {
+  process.stderr.write('[jwforge-hook-error] ' + hookName + ': ' + String(error) + '\n');
+}
+
 // --- Stdin Reader ---
 
 export function readStdin() {
@@ -80,9 +86,15 @@ export function isPipelineArtifact(filePath, cwd) {
 
 export function isFileInArchitecture(filePath, archContent, cwd) {
   const normalized = filePath.replace(/\\/g, '/');
-  if (archContent.includes(normalized)) return true;
   const relative = normalized.replace(cwd.replace(/\\/g, '/') + '/', '');
-  return archContent.includes(relative);
+  // Word-boundary match: path must be surrounded by non-path characters
+  const boundary = /[\s"'`\[\]()|,:\n]|^|$/;
+  function matchesBoundary(path) {
+    const escaped = path.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const re = new RegExp(`(?:^|[\\s"'\`\\[\\]()|,:\\n])${escaped}(?=[\\s"'\`\\[\\]()|,:\\n]|$)`);
+    return re.test(archContent);
+  }
+  return matchesBoundary(normalized) || matchesBoundary(relative);
 }
 
 // --- Lock Staleness Check ---
@@ -150,7 +162,8 @@ export function evaluatePhaseGuard(state, { filePath, command, cwd }) {
       }
 
       if (command) {
-        const commandFiles = command.match(/[\w./-]+\.\w{1,5}/g) || [];
+        const rawMatches = [...command.matchAll(/(?:^|[\s"'=])([.\w][\w./-]*\.\w{1,5})(?=[\s"';)|]|$)/g)].map(m => m[1]);
+        const commandFiles = rawMatches.filter(f => !/\.(tar\.\w+|min\.js|min\.css)$/i.test(f));
         const unauthorized = commandFiles.filter(f => !isFileInArchitecture(f, archContent, cwd));
         if (unauthorized.length > 0) {
           return {

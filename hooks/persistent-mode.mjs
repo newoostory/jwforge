@@ -70,7 +70,11 @@ async function main() {
     };
     const phaseName = phaseNames[state.phase] || `Phase ${state.phase}`;
 
-    console.log(BLOCK(`[JWForge] Pipeline is active (${phaseName}, step ${state.step}). Work is not complete. Continue from where you left off. Read .jwforge/current/state.json for current state.`));
+    if (state.step === '1-3') {
+      console.log(BLOCK(`[JWForge] Waiting for user interview answers (step 1-3). Read .jwforge/current/interview-log.md — find the most recent Round's questions and re-display them exactly. Do NOT generate new questions. Just wait for user to answer.`));
+    } else {
+      console.log(BLOCK(`[JWForge] Pipeline is active (${phaseName}, step ${state.step}). Work is not complete. Continue from where you left off. Read .jwforge/current/state.json for current state.`));
+    }
   } catch {
     console.log(ALLOW);
   }
