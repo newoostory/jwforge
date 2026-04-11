@@ -453,8 +453,7 @@ Estimated agents:
 - Fixer (if needed): 1-2
 ```
 
-For M/L: display estimate and auto-proceed.
-For XL: **wait for user confirmation** before proceeding.
+For all complexities (M/L/XL): display estimate and auto-proceed. No confirmation required.
 
 **Step 1-6b: Team Restructure**
 
@@ -577,8 +576,7 @@ If `approve`:
 
 **M complexity:** Auto-proceed. No user review needed.
 **L complexity:** Display architecture summary to user, then proceed.
-**XL complexity:** Display full architecture and **wait for user approval**.
-- If rejected → relay feedback to Architect via SendMessage (max 2 redesigns)
+**XL complexity:** Display full architecture to user, then proceed. No approval gate.
 
 Update state.json: `phase2.status: "done"`, `phase: 3`, `step: "3-1"`
 
@@ -652,7 +650,10 @@ For each task in this level:
     description="Level {N}: {one-line task summary}",
     prompt=<content of agents/executor.md + assigned task details
            + (if design selected) "Selected design: {path}. Implement according to this design."
-           + (if Level 1+) previous level results summary>
+           + (if Level 1+) previous level results summary
+           + "Knowledge files (read before implementing):
+              - .jwforge/knowledge/issue-patterns.jsonl
+              - .jwforge/knowledge/review-additions.md">
   )
 ```
 
@@ -1127,11 +1128,16 @@ Write verification evidence to `.jwforge/current/verify-evidence.md`:
 After Phase 4 completion:
 
 ```
-1. SendMessage(to="architect", message="Pipeline complete. Shutting down.")
-2. TeamDelete("jwforge-deeptk-{task-slug}")
-3. Move .jwforge/current/* → .jwforge/archive/{YYYYMMDD-HHmmss}-{task-slug}/
-4. Display final report to user
-5. Pipeline complete
+1. Write state.json status BEFORE any cleanup:
+   - Read .jwforge/current/state.json
+   - Set status to "done" (if pipeline completed successfully) or "stopped" (if halted)
+   - Write complete JSON back to .jwforge/current/state.json
+   This MUST happen before TeamDelete and archive so the archived state.json reflects completion.
+2. SendMessage(to="architect", message="Pipeline complete. Shutting down.")
+3. TeamDelete("jwforge-deeptk-{task-slug}")
+4. Move .jwforge/current/* → .jwforge/archive/{YYYYMMDD-HHmmss}-{task-slug}/
+5. Display final report to user
+6. Pipeline complete
 ```
 
 **If Phase 4 stopped (unfixable):**
@@ -1139,8 +1145,6 @@ After Phase 4 completion:
 - Do NOT archive — keep in `.jwforge/current/` for manual resolution
 - Tell user the last good git commit hash
 - User can fix manually then `/resume` to continue
-
-Update state.json: `status: "done"` (or `"stopped"` if halted)
 
 ---
 
@@ -1275,7 +1279,10 @@ If interview-log.md exists but task-spec.md missing:
   → Recreate Interview team (TeamCreate + Interviewer + Analyst + Researcher)
   → Read interview-log.md to recover all Q&A history
   → Resume from last completed round (state.phase1.interview_round)
-  → SendMessage to Interviewer with interview history + gaps
+  → SendMessage to Interviewer with:
+       - Full interview history (all previous Q&A rounds from interview-log.md)
+       - Current round number: {state.phase1.interview_round + 1}
+       - "IMPORTANT: The above questions have ALREADY been asked and answered. Do NOT re-ask them. Generate only NEW questions targeting remaining gaps."
   → Continue interview loop from where it left off
 
 If neither exists:
@@ -1329,7 +1336,7 @@ Team agents are NOT persistent across sessions. On resume:
 | Interview rounds | 2-3 | 3+ | Unlimited |
 | Haiku collectors | 4 (all) | 4 (all) | 4 (all) |
 | Phase 2 user review | Auto-proceed | Show summary | **Approval required** |
-| Cost estimate | Show + auto-proceed | Show + auto-proceed | Show + **wait for confirm** |
+| Cost estimate | Show + auto-proceed | Show + auto-proceed | Show + auto-proceed |
 | Phase 3 worktree | No | Optional (3+ executors) | Optional (3+ executors) |
 | Phase 4 analyzers | Per-file (sonnet) | Per-file (sonnet) | Per-file (sonnet) |
 | Security review | Yes (opus) | Yes (opus) | Yes (opus) |
