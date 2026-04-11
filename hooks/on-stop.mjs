@@ -104,7 +104,18 @@ async function main() {
     // 1. Archive before any cleanup (captures current state)
     archivePipeline(cwd, state);
 
-    // 2. Remove pipeline lock
+    // 2. Update state to stopped (only if still in progress)
+    if (state.status === 'in_progress') {
+      state.status = 'stopped';
+      state.stopped_at = new Date().toISOString();
+      state.stop_reason = 'session_end';
+      writeFileSync(
+        join(cwd, JWFORGE_DIR, 'current', 'state.json'),
+        JSON.stringify(state, null, 2),
+      );
+    }
+
+    // 3. Remove pipeline lock
     const lockPath = join(cwd, JWFORGE_DIR, 'current', 'pipeline-required.json');
     if (existsSync(lockPath)) unlinkSync(lockPath);
 

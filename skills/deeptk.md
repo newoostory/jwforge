@@ -106,9 +106,22 @@ When triggered, execute these steps in order:
 2. If YES:
    - Read it
    - If state.pipeline === "deeptk":
+
+     SPECIAL CASE — Interview wait resume (no prompt needed):
+     If state.status === "stopped" AND state.step is "1-2" or "1-3":
+       → Check interview-log.md: does the last Round have questions but NO answers?
+       → If YES: automatically resume (no "Continue?" prompt).
+         - Restore state.status to "in_progress"
+         - Treat the current user message as answers to the last round's questions.
+         - Go directly to Resume Logic Phase 1 / Case A (process answers immediately).
+         - Do NOT re-display or re-generate questions.
+       → If NO (last round already has answers): show normal "Continue?" prompt below.
+
+     NORMAL CASE:
      Display: "Previous deeptk task: {task}, Phase {N} Step {X}. Continue? (y/n)"
      If yes → resume from that Phase/Step (see Resume Logic section)
      If no → delete contents of `.jwforge/current/`, start fresh
+
    - If state.pipeline !== "deeptk":
      Display: "A different pipeline ({pipeline}) is active. Stop it first with /cancel."
      STOP.
