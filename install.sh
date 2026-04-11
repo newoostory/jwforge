@@ -207,25 +207,30 @@ if [[ -f "$HOOKS_JSON" ]]; then
     const runtimePath = '$RUNTIME_DIR_NODE';
     const replaceRoot = (cmd) => cmd.replace(/\\\$CLAUDE_PLUGIN_ROOT|\\\"\\\$CLAUDE_PLUGIN_ROOT\\\"/g, '\"' + runtimePath + '\"').replace(/\"\"/g, '\"');
 
-    // Remove old JWForge hooks from every event array, preserve all others
+    // Remove old JWForge hooks from every event array (handles both flat and nested formats)
     for (const event of Object.keys(settings.hooks)) {
-      settings.hooks[event] = (settings.hooks[event] || []).filter(
-        (h) => typeof h.command !== 'string' || !h.command.includes('jwforge')
-      );
+      settings.hooks[event] = (settings.hooks[event] || []).filter(h => {
+        // Old flat format: { matcher, command, timeout }
+        if (typeof h.command === 'string' && h.command.includes('jwforge')) return false;
+        // New nested format: { matcher, hooks: [{ type, command, timeout }] }
+        if (Array.isArray(h.hooks) && h.hooks.some(inner => inner.command && inner.command.includes('jwforge'))) return false;
+        return true;
+      });
     }
 
-    // Add fresh JWForge hooks
+    // Add fresh JWForge hooks in correct nested format
     for (const [event, matchers] of Object.entries(hooksConfig.hooks || {})) {
       if (!settings.hooks[event]) settings.hooks[event] = [];
       for (const matcher of matchers) {
-        for (const hook of matcher.hooks) {
-          const entry = {
-            matcher: matcher.matcher || '',
-            command: replaceRoot(hook.command)
-          };
-          if (hook.timeout) entry.timeout = hook.timeout;
-          settings.hooks[event].push(entry);
-        }
+        const entry = {
+          matcher: matcher.matcher || '',
+          hooks: matcher.hooks.map(hook => {
+            const h = { type: hook.type || 'command', command: replaceRoot(hook.command) };
+            if (hook.timeout) h.timeout = hook.timeout;
+            return h;
+          })
+        };
+        settings.hooks[event].push(entry);
       }
     }
 
