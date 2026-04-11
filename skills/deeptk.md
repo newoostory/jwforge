@@ -71,7 +71,7 @@ Phase 2: Design (Architecture Team)
 ├─ Architect designs architecture.md
 ├─ Researcher subagent — feasibility validation
 ├─ Reviewer subagent — spec compliance
-└─ User approval (XL)
+└─ Auto-proceed (all complexities)
 
 Phase 3: Build (Architecture Team, recycled per level)
 ├─ Level-based parallel executor spawning
@@ -1141,6 +1141,10 @@ After Phase 4 completion:
 ```
 
 **If Phase 4 stopped (unfixable):**
+- Write state.json with `status: "stopped"` before any cleanup:
+  - Read .jwforge/current/state.json
+  - Update status to "stopped"
+  - Write complete JSON back
 - TeamDelete
 - Do NOT archive — keep in `.jwforge/current/` for manual resolution
 - Tell user the last good git commit hash

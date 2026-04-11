@@ -985,6 +985,10 @@ After Phase 4 completion:
 6. Pipeline complete
 
 **If Phase 4 stopped (unfixable):**
+- Write state.json with `status: "stopped"` before any cleanup:
+  - Read .jwforge/current/state.json
+  - Update status to "stopped"
+  - Write complete JSON back
 - Send shutdown request to Architect + TeamDelete
 - Do NOT archive -- keep in `.jwforge/current/` for manual resolution
 - Tell user the last good git commit hash
@@ -1064,9 +1068,9 @@ When `/deep` is invoked and `.jwforge/current/state.json` exists:
 
 **Phase 1 resume detail:** When resuming Phase 1 (interview-log.md exists but task-spec.md missing):
 - Read interview-log.md to recover previous Q&A
-- Include in the Interviewer prompt:
+- Include in the next interview round:
   - All previous Q&A history (paste or reference interview-log.md)
-  - Current round number: {state.phase1.interview_round + 1}
+  - Current round number: {state.phase1.rounds_completed + 1}
   - "IMPORTANT: The above questions have ALREADY been asked and answered. Do NOT re-ask them. Generate only NEW questions targeting remaining gaps."
 
 **Team resume:** When resuming Phase 2+, recreate the team (TeamCreate + Architect) since previous team was lost with the session. Architect starts fresh but state is recovered from files (task-spec.md, architecture.md, state.json). Reviewer is a subagent and does not need to be recreated in the team.
