@@ -135,6 +135,9 @@ Write to `{project}/.jwforge/current/architecture.md`:
 - {module relationship summary}
 - {data flow description}
 
+## Interface Contracts
+<!-- see Step 2.5 — write one entry per cross-task dependency, or "(No cross-task dependencies)" -->
+
 ## Tasks
 
 ### Task-1: {feature name}

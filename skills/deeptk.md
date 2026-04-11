@@ -744,7 +744,7 @@ If issues → spawn targeted fixers.
 ```
 Attempt 1 failed → spawn new sonnet Executor with error details
 Attempt 2 failed → spawn new opus Executor (model upgrade)
-Attempt 3 failed → SendMessage to Architect for redesign → new Executor
+Attempt 3 failed → SendMessage to Architect for redesign (Architect updates ONLY the failed Task and directly affected Tasks in architecture.md, then reports back) → new Executor
 Post-redesign attempt 1 failed → retry once more
 Post-redesign attempt 2 failed → STOP Phase 3, report to user
 ```
@@ -753,7 +753,7 @@ Post-redesign attempt 2 failed → STOP Phase 3, report to user
 ```
 Attempt 1 failed → spawn new opus Executor with error details
 Attempt 2 failed → spawn new opus Executor with more context
-Attempt 3 failed → SendMessage to Architect for redesign → new Executor
+Attempt 3 failed → SendMessage to Architect for redesign (Architect updates ONLY the failed Task and directly affected Tasks in architecture.md, then reports back) → new Executor
 Post-redesign attempt 1 failed → retry once more
 Post-redesign attempt 2 failed → STOP Phase 3, report to user
 ```
