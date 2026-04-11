@@ -7,8 +7,8 @@
  * Pure utility module — no hook-specific business logic.
  */
 
-import { readFileSync, existsSync } from 'fs';
-import { join, basename } from 'path';
+import { readFileSync, existsSync, unlinkSync } from 'fs';
+import { join } from 'path';
 
 // --- Path Constants ---
 
@@ -62,18 +62,36 @@ export function readLockFile(cwd) {
   try { return JSON.parse(readFileSync(lockFile, 'utf8')); } catch { return null; }
 }
 
+// --- Surface Pipeline Phase Mapping ---
+
+export const SURFACE_PHASE_MAP = {
+  'analyze': 1, 'plan': 2, 'implement': 3, 'verify': 4
+};
+
 // --- Pipeline Artifact Check ---
 
 export function isPipelineArtifact(filePath, cwd) {
   const normalized = filePath.replace(/\\/g, '/');
   const jwforgeDir = join(cwd, JWFORGE_DIR).replace(/\\/g, '/');
-  return normalized.startsWith(jwforgeDir) ||
-         normalized.includes('.jwforge/') ||
-         basename(normalized) === 'state.json' ||
-         basename(normalized) === 'task-spec.md' ||
-         basename(normalized) === 'architecture.md' ||
-         basename(normalized) === 'compact-snapshot.md' ||
-         basename(normalized) === 'agent-log.jsonl';
+  return normalized.startsWith(jwforgeDir) || normalized.includes('.jwforge/');
+}
+
+// --- Architecture File Check ---
+
+export function isFileInArchitecture(filePath, archContent, cwd) {
+  const normalized = filePath.replace(/\\/g, '/');
+  if (archContent.includes(normalized)) return true;
+  const relative = normalized.replace(cwd.replace(/\\/g, '/') + '/', '');
+  return archContent.includes(relative);
+}
+
+// --- Lock Staleness Check ---
+
+const DEFAULT_LOCK_TTL_MS = 3600000; // 1 hour
+
+export function isLockStale(lockData, maxAgeMs = DEFAULT_LOCK_TTL_MS) {
+  if (!lockData?.triggered_at) return false;
+  return (Date.now() - new Date(lockData.triggered_at).getTime()) > maxAgeMs;
 }
 
 // --- Pipeline Lock Check ---
@@ -84,7 +102,74 @@ export function checkPipelineLock(cwd) {
   if (existsSync(lockFile) && !existsSync(stateFile)) {
     let lockData = {};
     try { lockData = JSON.parse(readFileSync(lockFile, 'utf8')); } catch { /* ignore */ }
+    if (isLockStale(lockData)) {
+      try { unlinkSync(lockFile); } catch { /* ignore */ }
+      return null;
+    }
     return lockData;
   }
   return null;
+}
+
+// --- Phase Guard Evaluation ---
+
+export function evaluatePhaseGuard(state, { filePath, command, cwd }) {
+  // Determine effective phase
+  let phase = state.phase;
+  if (state.pipeline === 'surface' && state.step) {
+    phase = SURFACE_PHASE_MAP[state.step] || state.phase;
+  }
+
+  // If no file target provided, allow
+  if (!filePath && !command) {
+    return { action: 'allow', reason: '' };
+  }
+
+  // Phase 1-2: block project files (unless S complexity)
+  if (phase <= 2 && state.complexity !== 'S') {
+    return {
+      action: 'block',
+      reason: `Cannot edit project files during Phase ${phase} (${phase === 1 ? 'Deep Interview' : 'Architecture'}). Complete the design first. No code before design approval.`
+    };
+  }
+
+  // Phase 3: check file against architecture.md
+  if (phase === 3) {
+    const archFile = join(cwd, JWFORGE_DIR, 'current', 'architecture.md');
+    if (existsSync(archFile)) {
+      const archContent = readFileSync(archFile, 'utf8');
+
+      if (filePath) {
+        if (!isFileInArchitecture(filePath, archContent, cwd)) {
+          const normalized = filePath.replace(/\\/g, '/');
+          return {
+            action: 'block',
+            reason: `"${normalized}" is NOT in architecture.md. Only files listed in the architecture document can be modified during Phase 3 (Execute). Update architecture.md first if this file needs changes.`
+          };
+        }
+      }
+
+      if (command) {
+        const commandFiles = command.match(/[\w./-]+\.\w{1,5}/g) || [];
+        const unauthorized = commandFiles.filter(f => !isFileInArchitecture(f, archContent, cwd));
+        if (unauthorized.length > 0) {
+          return {
+            action: 'block',
+            reason: `Bash command targets file(s) not in architecture.md: ${unauthorized.join(', ')}. Only files listed in the architecture can be modified during Phase 3.`
+          };
+        }
+      }
+    }
+  }
+
+  // Phase 4: warn only
+  if (phase === 4) {
+    const target = filePath ? `"${filePath.replace(/\\/g, '/')}"` : 'file operation';
+    return {
+      action: 'warn',
+      reason: `Phase 4 (Verify): editing ${target}. Ensure this is part of the fix loop, not new feature work.`
+    };
+  }
+
+  return { action: 'allow', reason: '' };
 }
