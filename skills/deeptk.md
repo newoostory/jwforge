@@ -651,6 +651,7 @@ For each task in this level:
     prompt=<content of agents/executor.md + assigned task details
            + (if design selected) "Selected design: {path}. Implement according to this design."
            + (if Level 1+) previous level results summary
+           + (if Level 1+) "Interface Contracts (from .jwforge/current/architecture.md): read the Interface Contracts section for the contract your task must satisfy as a consumer"
            + "Knowledge files (read before implementing):
               - .jwforge/knowledge/issue-patterns.jsonl
               - .jwforge/knowledge/review-additions.md">
@@ -803,7 +804,28 @@ Before spawning any subagents, run available linters/typecheckers via Bash:
 4. Warnings collected but do NOT block — pass to Reviewers in later stages
 ```
 
-Update state.json: `phase4.status: "in_progress"`, `step: "4-2"`
+Update state.json: `phase4.status: "in_progress"`, `step: "4-1b"`
+
+### Step 4-1b: Contract Mesh Validation
+
+Spawn contract-validator subagent to verify all Interface Contracts from architecture.md are satisfied:
+
+```
+Read agents/contract-validator.md
+Agent(
+  model="sonnet",
+  name="contract-validator",
+  prompt=<content of agents/contract-validator.md
+         + "architecture.md path: .jwforge/current/architecture.md"
+         + "modified files: {list of all created/modified files from Phase 3}">
+)
+```
+
+**Branching:**
+- `verdict: pass` OR no contracts defined → proceed to Step 4-2
+- `verdict: mismatches_found` → Step 4-5 Fix Loop immediately (contract violations block analysis)
+
+Update state.json: `step: "4-2"`
 
 ### Step 4-2: Code Analysis (Analyzer subagents, parallel)
 
@@ -1036,7 +1058,12 @@ Read agents/fixer.md
 Agent(
   model="sonnet",
   name="fixer-{N}",
-  prompt=<content of agents/fixer.md + failure details + affected files>
+  prompt=<content of agents/fixer.md
+         + failure details
+         + affected files
+         + "Regression Context:
+            Previous fixes this loop: [{fix-N summary, files touched}]
+            Known regressions to avoid: [{description from prior fix notes}]">
 )
 ```
 
@@ -1059,7 +1086,7 @@ Fixer (sonnet) → fix → git commit [jwforge-deeptk] fix: {desc} → re-run te
         +-- Still failing
               |
               v
-            SendMessage to Architect for redesign → new Executor → git commit → re-run tests
+            SendMessage to Architect for redesign (Architect updates ONLY the failed Task and directly affected Tasks in architecture.md, then reports back) → new Executor with updated task → git commit → re-run tests
               |
               +-- Pass → re-run review or Step 4-6
               +-- Fail after 2 more attempts → STOP Phase 4, report to user
