@@ -1335,7 +1335,7 @@ Team agents are NOT persistent across sessions. On resume:
 |--------|-----------|-----------|---------------|
 | Interview rounds | 2-3 | 3+ | Unlimited |
 | Haiku collectors | 4 (all) | 4 (all) | 4 (all) |
-| Phase 2 user review | Auto-proceed | Show summary | **Approval required** |
+| Phase 2 user review | Auto-proceed | Show summary | Auto-proceed |
 | Cost estimate | Show + auto-proceed | Show + auto-proceed | Show + auto-proceed |
 | Phase 3 worktree | No | Optional (3+ executors) | Optional (3+ executors) |
 | Phase 4 analyzers | Per-file (sonnet) | Per-file (sonnet) | Per-file (sonnet) |
