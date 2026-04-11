@@ -8,7 +8,7 @@ When a JWForge pipeline is active, **ALL work MUST follow the pipeline phases**.
 Before doing ANY work, check if `.jwforge/current/state.json` exists and has `"status": "in_progress"`.
 If it does, you are inside an active pipeline and MUST obey the rules below.
 
-**Pipeline Lock**: When `/deep` or `/surface` is invoked, a lock file `.jwforge/current/pipeline-required.json` is created BEFORE you process the message. If this lock exists but `state.json` doesn't, ALL file modifications are blocked. You MUST initialize state.json through the proper pipeline protocol first. You cannot skip this step.
+**Pipeline Lock**: When `/deep`, `/deeptk`, or `/surface` is invoked, a lock file `.jwforge/current/pipeline-required.json` is created BEFORE you process the message. If this lock exists but `state.json` doesn't, ALL file modifications are blocked. You MUST initialize state.json through the proper pipeline protocol first. You cannot skip this step.
 
 ## Hard Rules (NEVER violate)
 
@@ -31,21 +31,18 @@ If it does, you are inside an active pipeline and MUST obey the rules below.
 - Do NOT edit files outside the architecture plan without updating the architecture first.
 - This applies to ALL methods of file modification: Edit tool, Write tool, Bash tool (sed, echo, tee, etc.).
 
-### 4. NO FIXES WITHOUT ROOT CAUSE (Surface pipeline)
-- For `/surface` bug-fix tasks: you MUST complete root cause investigation before ANY code changes.
-- `state.json` must have a non-empty `root_cause` field before fixes are allowed.
-
-### 5. GIT COMMIT CONVENTIONS
+### 4. GIT COMMIT CONVENTIONS
 - During `/deep` pipeline: all commits MUST use `[jwforge]` prefix.
+- During `/deeptk` pipeline: all commits MUST use `[jwforge-deeptk]` prefix.
 - During `/surface` pipeline: all commits MUST use `[jwforge-surface]` prefix.
 - No direct `git commit` without the proper prefix during active pipelines.
 
-### 6. NO BASH BYPASS
+### 5. NO BASH BYPASS
 - Do NOT use the Bash tool to circumvent Edit/Write guards.
 - `sed -i`, `echo > file`, `cat << EOF > file`, `tee`, `cp`, `mv` to project files are ALL subject to the same phase restrictions as Edit/Write.
 - If the Edit/Write tool would be blocked, the Bash equivalent is also forbidden.
 
-### 7. STATE INTEGRITY
+### 6. STATE INTEGRITY
 - Do NOT manually edit `state.json` to skip phases or mark them as complete.
 - State transitions must follow the legal order:
   - `phase: 1` → `phase: 2` (only after `task-spec.md` exists)
@@ -62,6 +59,8 @@ If it does, you are inside an active pipeline and MUST obey the rules below.
 | `.jwforge/current/architecture.md` | Design document | Phase 2 end |
 | `.jwforge/current/agent-log.jsonl` | Agent tracking | Ongoing |
 | `.jwforge/current/compact-snapshot.md` | Compaction backup | On context compact |
+| `.jwforge/archive/{name}/` | Pipeline archive | Pipeline end |
+| `.jwforge/knowledge/` | Learning DB | Ongoing |
 
 ## Enforcement
 
@@ -70,6 +69,7 @@ These rules are enforced by hooks in `hooks/`:
 - `bash-guard.mjs` — Blocks Bash file writes during wrong phases
 - `git-commit-guard.mjs` — Enforces commit prefix conventions
 - `state-validator.mjs` — Validates state.json transitions
+- `artifact-validator.mjs` — Validates required artifacts exist before phase transitions
 - `persistent-mode.mjs` — Prevents premature pipeline stops
 - `pre-compact.mjs` — Preserves state during context compaction
 

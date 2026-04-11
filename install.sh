@@ -101,7 +101,7 @@ echo ""
 
 # --- 1. Install Skills ---
 
-echo "[1/6] Installing skills..."
+echo "[1/5] Installing skills..."
 
 # Install all skills from skill-sources/
 for skill_dir in "$JWFORGE_HOME/skill-sources"/*/; do
@@ -120,23 +120,28 @@ for skill_dir in "$JWFORGE_HOME/skill-sources"/*/; do
   echo "  [OK] /$skill_name skill -> $TARGET_SKILL/SKILL.md"
 done
 
-# Install commands from commands/ subdirectories
-for cmd_dir in "$JWFORGE_HOME/commands"/*/; do
-  if [[ -d "$cmd_dir" ]]; then
-    cmd_name="$(basename "$cmd_dir")"
-    TARGET_CMD="$CLAUDE_DIR/commands/$cmd_name"
-    copy_dir "$cmd_dir" "$TARGET_CMD"
-    echo "  [OK] /$cmd_name commands -> $TARGET_CMD/"
-  fi
-done
-
 # --- 2. Install JWForge runtime files ---
 
-echo "[2/6] Installing runtime files..."
+echo "[2/5] Installing runtime files..."
 
 # Create jwforge runtime directory inside .claude
 RUNTIME_DIR="$CLAUDE_DIR/jwforge"
 mkdir -p "$RUNTIME_DIR"
+
+# --- Stale file cleanup ---
+echo "[CLEAN] Removing stale files from previous installation..."
+if [ -d "$RUNTIME_DIR" ]; then
+  for target_file in "$RUNTIME_DIR"/hooks/*.mjs "$RUNTIME_DIR"/hooks/*.js \
+                     "$RUNTIME_DIR"/agents/*.md "$RUNTIME_DIR"/skills/*.md; do
+    if [ -f "$target_file" ]; then
+      src_relative="${target_file#$RUNTIME_DIR/}"
+      if [ ! -f "$JWFORGE_HOME/$src_relative" ]; then
+        rm "$target_file"
+        echo "  [CLEAN] Removed stale: $src_relative"
+      fi
+    fi
+  done
+fi
 
 # Copy agents, templates, config, hooks
 copy_dir "$JWFORGE_HOME/agents" "$RUNTIME_DIR/agents"
@@ -157,7 +162,7 @@ echo "  [OK] skills/ -> $RUNTIME_DIR/skills/"
 
 # --- 3. Patch paths in installed files ---
 
-echo "[3/6] Configuring paths..."
+echo "[3/5] Configuring paths..."
 
 RUNTIME_DIR_NODE="$(to_node_path "$RUNTIME_DIR")"
 
@@ -175,19 +180,11 @@ for skill_file in "$CLAUDE_DIR/skills"/*/SKILL.md; do
   fi
 done
 
-# Patch <JWFORGE_HOME> placeholders in installed command files
-CLAUDE_DIR_NODE="$(to_node_path "$CLAUDE_DIR")"
-for cmd_file in "$CLAUDE_DIR/commands"/*/*.md; do
-  if [[ -f "$cmd_file" ]]; then
-    sed -i "s|<JWFORGE_HOME>|$CLAUDE_DIR_NODE|g" "$cmd_file"
-  fi
-done
-
 echo "  [OK] Paths configured to $RUNTIME_DIR_NODE"
 
 # --- 4. Register hooks ---
 
-echo "[4/6] Registering hooks..."
+echo "[4/5] Registering hooks..."
 
 # Read hooks.json and register into settings.json
 HOOKS_JSON="$JWFORGE_HOME/hooks/hooks.json"
@@ -239,7 +236,9 @@ else
   echo "  [WARN] hooks.json not found, skipping hook registration"
 fi
 
-# --- 6/6. Add .jwforge/ to gitignore ---
+# --- 5/5. Add .jwforge/ to gitignore ---
+
+echo "[5/5] Configuring gitignore..."
 
 if [[ "$INSTALL_MODE" == "global" ]]; then
   GITIGNORE="$HOME/.gitignore_global"
@@ -271,34 +270,6 @@ else
   fi
 fi
 
-# --- 5. Install statusline ---
-
-echo "[5/6] Installing statusline..."
-
-STATUSLINE_SRC="$JWFORGE_HOME/statusline/statusline.sh"
-STATUSLINE_DST="$CLAUDE_DIR/statusline.sh"
-
-if [[ -f "$STATUSLINE_SRC" ]]; then
-  copy_file "$STATUSLINE_SRC" "$STATUSLINE_DST"
-  chmod +x "$STATUSLINE_DST"
-
-  # Register statusLine in settings.json
-  node -e "
-    const fs = require('fs');
-    const raw = fs.readFileSync('$SETTINGS_FILE_NODE', 'utf8').replace(/^\uFEFF/, '');
-    const settings = JSON.parse(raw);
-    settings.statusLine = {
-      type: 'command',
-      command: '~/.claude/statusline.sh',
-      padding: 1
-    };
-    fs.writeFileSync('$SETTINGS_FILE_NODE', JSON.stringify(settings, null, 2));
-  "
-  echo "  [OK] statusline.sh -> $STATUSLINE_DST"
-  echo "  [OK] statusLine registered in settings.json"
-else
-  echo "  [SKIP] statusline/statusline.sh not found"
-fi
 
 # --- Done ---
 
@@ -322,9 +293,7 @@ echo "  JWForge installed successfully"
 echo "================================"
 echo ""
 echo "Skills available:"
-echo "  /jwforge <task>  Full pipeline (new features, complex changes)"
+echo "  /deep <task>     Full pipeline (new features, complex changes)"
 echo "  /deeptk <task>   Heavy pipeline with relay architecture (M/L/XL tasks)"
-echo "  /surface <task>  Light pipeline (bug fix, refactor, config)"
-echo "  /resume          Resume a stopped pipeline"
 echo ""
 echo "To uninstall: bash $JWFORGE_HOME/uninstall.sh $([ "$INSTALL_MODE" == "local" ] && echo "--local $(dirname "$CLAUDE_DIR")")"
