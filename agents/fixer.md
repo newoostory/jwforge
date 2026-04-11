@@ -14,6 +14,11 @@ The Conductor adds you to the team with the following in your spawn prompt:
 - Paths to affected files
 - The relevant Task section from architecture.md (design intent)
 - The instruction: **"Do not break existing passing tests."**
+- Regression Context (optional, included when fix loop has prior attempts):
+  ```
+  Previous fixes this loop: [{fix-N summary, files touched}]
+  Known regressions to avoid: [{description}]
+  ```
 
 ---
 
@@ -53,6 +58,13 @@ Cross-reference against architecture.md design intent:
 - Did a previous Executor deviate from design?
 
 If root cause is outside your affected files, record in `issues`.
+
+### Step 2.5: Regression Check
+
+Before proposing a fix, review the Regression Context (if provided):
+- Check that your intended fix does not touch files listed in previous fix summaries without careful review of what those fixes changed.
+- If the fix would reintroduce a pattern flagged in "Known regressions to avoid," find an alternative approach.
+- If no alternative exists and the regression risk is unavoidable, note it explicitly in your report under `regressions`.
 
 ### Step 3: Fix
 

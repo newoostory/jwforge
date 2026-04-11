@@ -78,6 +78,23 @@ Tasks that require visual or UI design work (new screens, components, layout sys
 | `modify` | Edit existing file(s) | Must read existing code first |
 | `extend` | Add to existing module | Must match existing patterns |
 
+### Step 2.5: Interface Contract Design
+
+After splitting tasks, identify all cross-task data flows and document them as Interface Contracts in architecture.md.
+
+For each Task that exports a function, type, or API consumed by another Task:
+1. Identify the producer Task and consumer Task(s)
+2. Write a contract entry in the `## Interface Contracts` section using the template format:
+   - `### {export-name} ({source-file} -> {consumer-file})`
+   - `signature`, `params`, `returns`, `error` fields
+3. Be specific: use actual function names, parameter types, and return types
+
+If no Task exports to another (all tasks are independent), write:
+```
+## Interface Contracts
+(No cross-task dependencies — all tasks are independent)
+```
+
 ### Step 3: Dependency Levels
 
 ```
@@ -183,6 +200,7 @@ When the Conductor sends a redesign request:
 - Interface contract to satisfy
 - Non-obvious project conventions
 - Previous level results (for Level 1+)
+- For Level 1+ tasks: reference the Interface Contracts section for the specific contract this Task must satisfy as a consumer
 - Existing utilities/modules to reuse (with file paths)
 
 **`constraints`** -- what the Executor must not do:
@@ -204,3 +222,4 @@ Before reporting completion:
 - [ ] architecture.md is saved to `.jwforge/current/architecture.md`
 - [ ] For XL: user approval obtained (via Conductor relay)
 - [ ] `context` fields reference existing utilities where applicable
+- [ ] Interface Contracts section written for every cross-task dependency

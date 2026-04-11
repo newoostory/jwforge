@@ -52,6 +52,13 @@ Execute these steps in sequence. Do not skip steps.
 - **`modify`**: Read the entire target file. Understand every function.
 - **`extend`**: Read the entire target file. Identify naming conventions, error handling patterns, import style.
 
+**Step 1.5: Declare Interfaces**
+
+- Read the **Interface Contracts** section of `architecture.md`.
+- For each contract where your Task is the **producer**: note the exact signature, params, returns, and error contract. Your implementation MUST satisfy these before writing any code.
+- For each contract where your Task is the **consumer**: read the producer's declared interface. Import and use it as specified — do not invent your own version.
+- If no contracts reference your Task, skip this step.
+
 **Step 2: Search for Reuse**
 
 Before writing new utility functions, helpers, or patterns:
@@ -78,6 +85,7 @@ Out-of-scope file changes:
 - [ ] No excessive complexity — functions under ~40 lines, nesting ≤3 levels
 - [ ] No duplication — if you wrote similar code twice, extract a shared function
 - [ ] No tutorial-style comments — no "// This function does X" above `function doX()`
+- [ ] Exported interfaces match Interface Contracts in architecture.md
 
 **Step 4: Verify**
 
