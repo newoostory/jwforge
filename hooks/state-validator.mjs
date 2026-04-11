@@ -14,8 +14,20 @@
  */
 
 import { existsSync } from 'fs';
-import { join, basename } from 'path';
-import { readStdin, getCwd, readState, ALLOW, BLOCK, JWFORGE_DIR } from './lib/common.mjs';
+import { join } from 'path';
+import { readStdin, getCwd, readState, ALLOW, ALLOW_MSG, BLOCK, JWFORGE_DIR } from './lib/common.mjs';
+
+const VALID_STEPS = {
+  deep: ['1-1','1-2','1-3','1-3b','1-4','1-5','1-5b','1-6',
+         '2-1','2-2','2-2b',
+         '3-1','3-2','3-2b','3-3','3-4','3-5','3-6','3-7',
+         '4-1','4-2','4-3','4-4','4-5','4-6'],
+  deeptk: ['1-1','1-2','1-2a','1-2b','1-2c','1-3','1-4','1-5','1-6',
+           '2-1','2-2','2-3','2-4','2-5',
+           '3-1','3-2','3-3','3-4','3-5',
+           '4-1','4-2','4-3','4-4','4-5','4-6'],
+  surface: ['analyze','plan','implement','verify']
+};
 
 async function main() {
   try {
@@ -28,8 +40,9 @@ async function main() {
     const filePath = data.file_path || data.filePath || data.input?.file_path || '';
     if (!filePath) { console.log(ALLOW); return; }
 
-    // Only validate state.json writes
-    if (basename(filePath) !== 'state.json' || !filePath.includes('.jwforge')) {
+    // Only validate state.json writes — use full path for precision
+    const normalized = filePath.replace(/\\/g, '/');
+    if (!normalized.endsWith('state.json') || !normalized.includes('.jwforge/current/')) {
       console.log(ALLOW);
       return;
     }
@@ -147,6 +160,43 @@ async function main() {
       if (phaseStatus && phaseStatus !== 'done' && phaseStatus !== 'skipped') {
         console.log(BLOCK(`[JWForge State Validator] BLOCKED: Phase ${oldPhase} status is "${phaseStatus}", not "done". Complete the current phase before advancing.`));
         return;
+      }
+    }
+
+    // === RULE 7: Step whitelist validation (warn, not block) ===
+    const newStep = newState.step;
+    if (newStep && typeof newStep === 'string') {
+      const pipeline = newState.pipeline || currentState.pipeline;
+      const allowedSteps = VALID_STEPS[pipeline];
+      if (allowedSteps && !allowedSteps.includes(newStep)) {
+        console.log(ALLOW_MSG(`[JWForge State Validator] WARNING: Unrecognized step "${newStep}" for pipeline "${pipeline}". Known steps: ${allowedSteps.join(', ')}.`));
+        return;
+      }
+    }
+
+    // === RULE 8: Sub-step completion checks before phase advancement ===
+    if (newPhase > oldPhase) {
+      const pipeline = newState.pipeline || currentState.pipeline;
+
+      // Phase 1 → 2 for deeptk: require researcher + reviewer completion
+      if (oldPhase === 1 && newPhase === 2 && pipeline === 'deeptk') {
+        if (!currentState.phase1?.researcher_validated) {
+          console.log(BLOCK(`[JWForge State Validator] BLOCKED: Cannot advance to Phase 2 — researcher has not validated Phase 1 output (phase1.researcher_validated is not true).`));
+          return;
+        }
+        if (!currentState.phase1?.reviewer_passed) {
+          console.log(BLOCK(`[JWForge State Validator] BLOCKED: Cannot advance to Phase 2 — reviewer has not passed Phase 1 output (phase1.reviewer_passed is not true).`));
+          return;
+        }
+      }
+
+      // Phase 3 → 4: require at least one completed executor level
+      if (oldPhase === 3 && newPhase === 4) {
+        const completedLevels = currentState.phase3?.completed_levels;
+        if (Array.isArray(completedLevels) && completedLevels.length === 0) {
+          console.log(BLOCK(`[JWForge State Validator] BLOCKED: Cannot advance to Phase 4 — no executor levels completed (phase3.completed_levels is empty).`));
+          return;
+        }
       }
     }
 

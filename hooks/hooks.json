@@ -46,6 +46,11 @@
             "type": "command",
             "command": "node \"$CLAUDE_PLUGIN_ROOT\"/hooks/state-validator.mjs",
             "timeout": 3
+          },
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PLUGIN_ROOT\"/hooks/artifact-validator.mjs",
+            "timeout": 3
           }
         ]
       },
@@ -115,12 +120,12 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"$CLAUDE_PLUGIN_ROOT\"/hooks/on-stop.js",
+            "command": "node \"$CLAUDE_PLUGIN_ROOT\"/hooks/persistent-mode.mjs",
             "timeout": 5
           },
           {
             "type": "command",
-            "command": "node \"$CLAUDE_PLUGIN_ROOT\"/hooks/persistent-mode.mjs",
+            "command": "node \"$CLAUDE_PLUGIN_ROOT\"/hooks/on-stop.mjs",
             "timeout": 5
           },
           {

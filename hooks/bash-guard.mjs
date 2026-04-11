@@ -8,14 +8,11 @@
  * during pipeline phases where Edit/Write would also be blocked.
  *
  * Same phase logic as pre-tool-guard.mjs but applied to Bash commands.
- * NOTE: All phase rules check state.phase (pipeline-agnostic), so /deeptk is handled
- * identically to /deep. The only pipeline-specific check is RULE 3 (surface bug-fix),
- * which explicitly checks state.pipeline === 'surface' and does not affect deeptk.
+ * All phase rules check state.phase (pipeline-agnostic), so /deeptk is handled
+ * identically to /deep.
  */
 
-import { readFileSync, existsSync } from 'fs';
-import { join, basename } from 'path';
-import { readStdin, readState, getCwd, checkPipelineLock, ALLOW, BLOCK, ALLOW_MSG } from './lib/common.mjs';
+import { readStdin, readState, getCwd, isPipelineArtifact, checkPipelineLock, evaluatePhaseGuard, ALLOW, BLOCK, ALLOW_MSG } from './lib/common.mjs';
 
 // Patterns that indicate file-writing Bash commands
 const FILE_WRITE_PATTERNS = [
@@ -65,18 +62,11 @@ const SAFE_PATTERNS = [
   /^\s*printenv\b/,
 ];
 
-// Paths that are always writable (pipeline artifacts)
-function isWritingToPipelineArtifact(command) {
-  const jwforgePatterns = [
-    /\.jwforge/,
-    /state\.json/,
-    /task-spec\.md/,
-    /architecture\.md/,
-    /compact-snapshot\.md/,
-    /agent-log\.jsonl/,
-    /\.gitignore/,
-  ];
-  return jwforgePatterns.some(p => p.test(command));
+// Check if all file targets in a command are pipeline artifacts
+function isWritingToPipelineArtifact(command, cwd) {
+  const commandFiles = command.match(/[\w./-]+\.\w{1,5}/g) || [];
+  if (commandFiles.length === 0) return false;
+  return commandFiles.every(f => isPipelineArtifact(f, cwd));
 }
 
 function isFileWriteCommand(command) {
@@ -104,7 +94,7 @@ async function main() {
     const lockData = checkPipelineLock(cwd);
     if (lockData) {
       // Only block file-writing commands, not read-only ones
-      if (isFileWriteCommand(command) && !isWritingToPipelineArtifact(command)) {
+      if (isFileWriteCommand(command) && !isWritingToPipelineArtifact(command, cwd)) {
         console.log(BLOCK(`[JWForge Bash Guard] BLOCKED: Pipeline /${lockData.pipeline || 'deep'} was triggered but state.json not initialized. Follow the pipeline protocol first. No file modifications until pipeline is properly started.`));
         return;
       }
@@ -118,7 +108,7 @@ async function main() {
     }
 
     // Pipeline artifact writes are always allowed
-    if (isWritingToPipelineArtifact(command)) {
+    if (isWritingToPipelineArtifact(command, cwd)) {
       console.log(ALLOW);
       return;
     }
@@ -129,42 +119,20 @@ async function main() {
       return;
     }
 
-    // === RULE 1: Phase 1-2 → BLOCK all file-writing Bash commands ===
-    if (state.phase <= 2 && state.complexity !== 'S') {
-      console.log(BLOCK(`[JWForge Bash Guard] BLOCKED: File-writing Bash command during Phase ${state.phase} (${state.phase === 1 ? 'Deep Interview' : 'Architecture'}). No code modifications before design is complete. Use Edit/Write tools after Phase 2.`));
+    // === State.json Bash write block: state.json must only be modified via Write tool ===
+    if (/state\.json/.test(command) && isFileWriteCommand(command)) {
+      console.log(BLOCK('[JWForge Guard] BLOCKED: state.json must only be modified via the Write tool during active pipeline.'));
       return;
     }
 
-    // === RULE 2: Phase 3 → BLOCK if target file not in architecture.md ===
-    if (state.phase === 3) {
-      const archFile = join(cwd, '.jwforge', 'current', 'architecture.md');
-      if (existsSync(archFile)) {
-        const archContent = readFileSync(archFile, 'utf8');
-        // Extract potential file paths from the command
-        // This is a heuristic — we check if any architecture file is mentioned in the command
-        const commandFiles = command.match(/[\w./-]+\.\w{1,5}/g) || [];
-        const unauthorized = commandFiles.filter(f => {
-          const base = basename(f);
-          return !archContent.includes(base) && !archContent.includes(f);
-        });
-        if (unauthorized.length > 0) {
-          console.log(BLOCK(`[JWForge Bash Guard] BLOCKED: Bash command targets file(s) not in architecture.md: ${unauthorized.join(', ')}. Only files listed in the architecture can be modified during Phase 3.`));
-          return;
-        }
-      }
+    // === Phase guard: evaluate using shared logic ===
+    const guard = evaluatePhaseGuard(state, { command, cwd });
+    if (guard.action === 'block') {
+      console.log(BLOCK(`[JWForge Bash Guard] BLOCKED: ${guard.reason}`));
+      return;
     }
-
-    // === RULE 3: Surface bug-fix without root cause ===
-    if (state.pipeline === 'surface' && state.type === 'bug-fix') {
-      if (!state.root_cause || state.root_cause === '' || state.root_cause === 'unknown') {
-        console.log(BLOCK(`[JWForge Bash Guard] BLOCKED: File-writing Bash command before root cause investigation. Iron Law: NO FIXES WITHOUT ROOT CAUSE.`));
-        return;
-      }
-    }
-
-    // Phase 4 — warn but allow
-    if (state.phase === 4) {
-      console.log(ALLOW_MSG(`[JWForge] Phase 4: Bash file operation detected. Ensure this is part of the fix loop.`));
+    if (guard.action === 'warn') {
+      console.log(ALLOW_MSG(`[JWForge] ${guard.reason}`));
       return;
     }
 

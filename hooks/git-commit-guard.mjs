@@ -5,7 +5,7 @@
  *
  * Enforces git commit conventions during active pipelines:
  * 1. /deep pipeline commits MUST use [jwforge] prefix
- * 2. /surface pipeline commits MUST use [jwforge-surface] prefix
+ * 2. /deeptk pipeline commits MUST use [jwforge-deeptk] prefix
  * 3. Blocks dangerous git operations (force push, reset --hard, etc.) during pipeline
  * 4. Blocks git commit --amend during pipeline (prevents losing previous commits)
  */
@@ -13,6 +13,12 @@
 import { readFileSync, existsSync } from 'fs';
 import { join } from 'path';
 import { readStdin, readState, getCwd, checkPipelineLock, ALLOW, BLOCK, ALLOW_MSG } from './lib/common.mjs';
+
+function getExpectedPrefix(state) {
+  if (state.pipeline === 'deeptk') return '[jwforge-deeptk]';
+  if (state.pipeline === 'surface') return '[jwforge-surface]';
+  return '[jwforge]';
+}
 
 async function main() {
   try {
@@ -50,7 +56,7 @@ async function main() {
       return;
     }
 
-    const prefix = state.pipeline === 'surface' ? '[jwforge-surface]' : state.pipeline === 'deeptk' ? '[jwforge-deeptk]' : '[jwforge]';
+    const prefix = getExpectedPrefix(state);
 
     // === Check for git commit ===
     if (/\bgit\s+commit\b/.test(command)) {
@@ -67,19 +73,24 @@ async function main() {
       }
 
       // Enforce commit prefix
-      // Extract -m message
-      const msgMatch = command.match(/-m\s+["']([^"']*?)["']/);
-      const heredocMatch = command.match(/<<\s*['"]?EOF['"]?\s*\n?([\s\S]*?)\nEOF/);
-      const message = msgMatch?.[1] || heredocMatch?.[1] || '';
+      // Extract -m message with 3-pattern matching (priority order)
+      // Pattern 1: -m "$(cat <<'EOF'\n...\nEOF\n)"
+      const catHeredocMatch = command.match(/\$\(cat\s+<<\s*['"]?EOF['"]?\s*\n([\s\S]*?)\nEOF\s*\)/);
+      // Pattern 2: standalone <<EOF
+      const standaloneHeredocMatch = command.match(/<<\s*['"]?EOF['"]?\s*\n([\s\S]*?)\nEOF/);
+      // Pattern 3: simple -m "message"
+      const simpleMsgMatch = command.match(/-m\s+["']([^"']*?)["']/);
+
+      const message = catHeredocMatch?.[1] || standaloneHeredocMatch?.[1] || simpleMsgMatch?.[1] || '';
 
       if (message && !message.includes(prefix)) {
         console.log(BLOCK(`[JWForge Git Guard] BLOCKED: Commit message must start with "${prefix}". Got: "${message.substring(0, 60)}...". Add the pipeline prefix to your commit message.`));
         return;
       }
 
-      // If we can't extract the message (complex command), warn but allow
+      // If we can't extract the message during active pipeline, block to be safe
       if (!message) {
-        console.log(ALLOW_MSG(`[JWForge] Reminder: commit messages during this pipeline must use "${prefix}" prefix.`));
+        console.log(BLOCK(`[JWForge Git Guard] BLOCKED: Could not extract commit message to verify "${prefix}" prefix. Use -m "message" or HEREDOC format.`));
         return;
       }
     }

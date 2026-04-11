@@ -5,7 +5,7 @@
  *
  * Two critical jobs:
  * 1. Detect pipeline-triggering keywords and inject mode messages
- * 2. CREATE PIPELINE LOCK FILE when /deep or /surface is detected
+ * 2. CREATE PIPELINE LOCK FILE when /deep or /deeptk is detected
  *    → This is the enforcement anchor. Even if the AI skips state.json creation,
  *      all guard hooks see the lock file and BLOCK unauthorized actions.
  *
@@ -13,9 +13,9 @@
  * Created BEFORE the AI even starts processing the message.
  */
 
-import { writeFileSync, existsSync, mkdirSync, unlinkSync } from 'fs';
+import { writeFileSync, readFileSync, existsSync, mkdirSync, unlinkSync } from 'fs';
 import { join } from 'path';
-import { readStdin, getCwd, ALLOW, ALLOW_MSG } from './lib/common.mjs';
+import { readStdin, getCwd, ALLOW, ALLOW_MSG, isLockStale } from './lib/common.mjs';
 
 const KEYWORDS = [
   // Cancel / stop
@@ -25,9 +25,7 @@ const KEYWORDS = [
   // Deep pipeline
   { patterns: ['/deep'], skill: 'deep', priority: 3, pipeline: 'deep', wordBoundary: ['deep'] },
   // Surface pipeline
-  { patterns: ['surface', '/surface', 'quick fix', '빠른 수정'], skill: 'surface', priority: 4, pipeline: 'surface' },
-  // Resume pipeline
-  { patterns: ['resume', '/resume', '재개'], skill: 'resume', priority: 5 },
+  { patterns: ['/surface'], skill: 'surface', priority: 4, pipeline: 'surface', wordBoundary: ['surface'] },
   // TDD mode
   { patterns: ['tdd', 'test first', '테스트 먼저'], mode: 'tdd', priority: 10 },
   // Verify mode
@@ -45,7 +43,7 @@ const MODE_MESSAGES = {
 
 
 /**
- * Create pipeline lock file IMMEDIATELY when /deep or /surface is detected.
+ * Create pipeline lock file IMMEDIATELY when /deep or /deeptk is detected.
  * This happens BEFORE the AI processes the message, so even if the AI
  * tries to skip state.json creation, the lock file exists and guards trigger.
  */
@@ -56,6 +54,17 @@ function createPipelineLock(cwd, pipeline, userMessage) {
   }
 
   const lockFile = join(lockDir, 'pipeline-required.json');
+
+  // E7: Stale lock handling — remove stale locks before creating a new one
+  if (existsSync(lockFile)) {
+    try {
+      const existingLock = JSON.parse(readFileSync(lockFile, 'utf8'));
+      if (isLockStale(existingLock)) {
+        unlinkSync(lockFile);
+      }
+    } catch { /* corrupted lock, overwrite */ }
+  }
+
   const lockData = {
     pipeline,
     triggered_at: new Date().toISOString(),
