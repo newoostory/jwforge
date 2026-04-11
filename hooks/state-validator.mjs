@@ -15,7 +15,7 @@
 
 import { existsSync } from 'fs';
 import { join } from 'path';
-import { readStdin, getCwd, readState, ALLOW, ALLOW_MSG, BLOCK, JWFORGE_DIR } from './lib/common.mjs';
+import { readStdin, getCwd, readState, ALLOW, ALLOW_MSG, BLOCK, JWFORGE_DIR, logHookError } from './lib/common.mjs';
 
 const VALID_STEPS = {
   deep: ['1-1','1-2','1-3','1-3b','1-4','1-5','1-5b','1-6','1-6a','1-6b',
@@ -201,8 +201,9 @@ async function main() {
     }
 
     console.log(ALLOW);
-  } catch {
+  } catch (e) {
     // Validator failure should not block — fail open
+    logHookError('state-validator', e);
     console.log(ALLOW);
   }
 }

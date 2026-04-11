@@ -15,7 +15,7 @@
 
 import { writeFileSync, readFileSync, existsSync, mkdirSync, unlinkSync } from 'fs';
 import { join } from 'path';
-import { readStdin, getCwd, ALLOW, ALLOW_MSG, isLockStale } from './lib/common.mjs';
+import { readStdin, getCwd, ALLOW, ALLOW_MSG, isLockStale, logHookError } from './lib/common.mjs';
 
 const KEYWORDS = [
   // Cancel / stop
@@ -148,7 +148,8 @@ async function main() {
     }
 
     console.log(ALLOW);
-  } catch {
+  } catch (e) {
+    logHookError('keyword-detector', e);
     console.log(ALLOW);
   }
 }

@@ -12,7 +12,7 @@
 
 import { readFileSync, existsSync } from 'fs';
 import { join } from 'path';
-import { readStdin, readState, getCwd, checkPipelineLock, ALLOW, BLOCK, ALLOW_MSG } from './lib/common.mjs';
+import { readStdin, readState, getCwd, checkPipelineLock, ALLOW, BLOCK, ALLOW_MSG, logHookError } from './lib/common.mjs';
 
 function getExpectedPrefix(state) {
   if (state.pipeline === 'deeptk') return '[jwforge-deeptk]';
@@ -114,7 +114,8 @@ async function main() {
     }
 
     console.log(ALLOW);
-  } catch {
+  } catch (e) {
+    logHookError('git-commit-guard', e);
     console.log(ALLOW);
   }
 }

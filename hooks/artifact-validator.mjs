@@ -20,7 +20,7 @@
 
 import { readFileSync, existsSync } from 'fs';
 import { join, basename } from 'path';
-import { readStdin, getCwd, readState, ALLOW, BLOCK, JWFORGE_DIR, SURFACE_PHASE_MAP } from './lib/common.mjs';
+import { readStdin, getCwd, readState, ALLOW, BLOCK, JWFORGE_DIR, SURFACE_PHASE_MAP, logHookError } from './lib/common.mjs';
 
 // --- Required artifacts per phase ---
 
@@ -138,8 +138,9 @@ async function main() {
     }
 
     console.log(ALLOW);
-  } catch {
+  } catch (e) {
     // Validator failure should not block — fail open
+    logHookError('artifact-validator', e);
     console.log(ALLOW);
   }
 }

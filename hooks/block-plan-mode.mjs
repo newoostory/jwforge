@@ -12,7 +12,7 @@
 
 import { existsSync } from 'fs';
 import { join } from 'path';
-import { readStdin, readState, getCwd, JWFORGE_DIR, ALLOW, BLOCK, ALLOW_MSG } from './lib/common.mjs';
+import { readStdin, readState, getCwd, JWFORGE_DIR, ALLOW, BLOCK, ALLOW_MSG, logHookError } from './lib/common.mjs';
 
 async function main() {
   try {
@@ -60,7 +60,8 @@ async function main() {
 
     // Default: allow
     console.log(ALLOW);
-  } catch {
+  } catch (e) {
+    logHookError('block-plan-mode', e);
     console.log(ALLOW);
   }
 }

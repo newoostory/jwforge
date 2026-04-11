@@ -14,7 +14,7 @@
 
 import { appendFileSync, existsSync, mkdirSync } from 'fs';
 import { join } from 'path';
-import { readStdin, getCwd, readState, ALLOW, JWFORGE_DIR } from './lib/common.mjs';
+import { readStdin, getCwd, readState, ALLOW, JWFORGE_DIR, logHookError } from './lib/common.mjs';
 
 async function main() {
   try {
@@ -75,7 +75,8 @@ async function main() {
     appendFileSync(logFile, JSON.stringify(entry) + '\n');
 
     console.log(ALLOW);
-  } catch {
+  } catch (e) {
+    logHookError('subagent-tracker', e);
     console.log(ALLOW);
   }
 }

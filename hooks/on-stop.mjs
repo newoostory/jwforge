@@ -15,7 +15,7 @@
 import { execSync } from 'child_process';
 import { readFileSync, writeFileSync, existsSync, unlinkSync, mkdirSync, copyFileSync, rmSync } from 'fs';
 import { join } from 'path';
-import { readStdin, getCwd, readState, JWFORGE_DIR } from './lib/common.mjs';
+import { readStdin, getCwd, readState, JWFORGE_DIR, logHookError } from './lib/common.mjs';
 
 // Pipeline artifact files worth archiving (excludes transient caches)
 const ARTIFACT_FILES = [
@@ -124,7 +124,8 @@ async function main() {
     }
 
     console.log(JSON.stringify({ continue: true }));
-  } catch {
+  } catch (e) {
+    logHookError('on-stop', e);
     console.log(JSON.stringify({ continue: true }));
   }
 }

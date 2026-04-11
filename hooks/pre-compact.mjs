@@ -19,7 +19,7 @@
 
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
 import { join } from 'path';
-import { readStdin, getCwd, readState, ALLOW, ALLOW_MSG, JWFORGE_DIR } from './lib/common.mjs';
+import { readStdin, getCwd, readState, ALLOW, ALLOW_MSG, JWFORGE_DIR, logHookError } from './lib/common.mjs';
 
 async function main() {
   try {
@@ -90,7 +90,8 @@ async function main() {
 
     // Inject reminder into conversation
     console.log(ALLOW_MSG(`[JWForge] Context compaction detected. Pipeline state saved to .jwforge/current/compact-snapshot.md. After compaction, read this file to restore context.`));
-  } catch {
+  } catch (e) {
+    logHookError('pre-compact', e);
     console.log(ALLOW);
   }
 }

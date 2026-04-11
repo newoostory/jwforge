@@ -12,7 +12,7 @@
  * identically to /deep.
  */
 
-import { readStdin, readState, getCwd, isPipelineArtifact, checkPipelineLock, evaluatePhaseGuard, ALLOW, BLOCK, ALLOW_MSG } from './lib/common.mjs';
+import { readStdin, readState, getCwd, isPipelineArtifact, checkPipelineLock, evaluatePhaseGuard, ALLOW, BLOCK, ALLOW_MSG, logHookError } from './lib/common.mjs';
 
 // Patterns that indicate file-writing Bash commands
 const FILE_WRITE_PATTERNS = [
@@ -138,7 +138,8 @@ async function main() {
     }
 
     console.log(ALLOW);
-  } catch {
+  } catch (e) {
+    logHookError('bash-guard', e);
     console.log(ALLOW);
   }
 }

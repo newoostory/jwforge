@@ -17,7 +17,7 @@
  */
 
 import { basename } from 'path';
-import { readStdin, readState, getCwd, isPipelineArtifact, checkPipelineLock, evaluatePhaseGuard, ALLOW, BLOCK, ALLOW_MSG } from './lib/common.mjs';
+import { readStdin, readState, getCwd, isPipelineArtifact, checkPipelineLock, evaluatePhaseGuard, ALLOW, BLOCK, ALLOW_MSG, logHookError } from './lib/common.mjs';
 
 const SENSITIVE_PATTERNS = [
   /\.env$/i, /\.env\.\w+$/i, /credentials\.json$/i,
@@ -85,8 +85,9 @@ async function main() {
     }
 
     console.log(ALLOW);
-  } catch {
+  } catch (e) {
     // Hook failure should never block the user
+    logHookError('pre-tool-guard', e);
     console.log(ALLOW);
   }
 }

@@ -12,7 +12,7 @@
 
 import { readFileSync, existsSync } from 'fs';
 import { join } from 'path';
-import { readStdin, getCwd, ALLOW, BLOCK } from './lib/common.mjs';
+import { readStdin, getCwd, ALLOW, BLOCK, logHookError } from './lib/common.mjs';
 
 function isContextLimitStop(data) {
   const reasons = [data.stop_reason, data.stopReason, data.reason]
@@ -75,7 +75,8 @@ async function main() {
     } else {
       console.log(BLOCK(`[JWForge] Pipeline is active (${phaseName}, step ${state.step}). Work is not complete. Continue from where you left off. Read .jwforge/current/state.json for current state.`));
     }
-  } catch {
+  } catch (e) {
+    logHookError('persistent-mode', e);
     console.log(ALLOW);
   }
 }
