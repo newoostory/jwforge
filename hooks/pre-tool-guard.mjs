@@ -68,7 +68,7 @@ async function main() {
     }
 
     // === State.json Edit block: state.json must only be modified via Write tool ===
-    if (filePath.endsWith('state.json') && filePath.includes('.jwforge')) {
+    if (filePath.endsWith('state.json') && filePath.includes('.jwforge/current/')) {
       console.log(BLOCK('[JWForge Guard] BLOCKED: state.json must only be modified via the Write tool during active pipeline.'));
       return;
     }

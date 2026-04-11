@@ -193,7 +193,7 @@ async function main() {
       // Phase 3 → 4: require at least one completed executor level
       if (oldPhase === 3 && newPhase === 4) {
         const completedLevels = currentState.phase3?.completed_levels;
-        if (Array.isArray(completedLevels) && completedLevels.length === 0) {
+        if (!Array.isArray(completedLevels) || completedLevels.length === 0) {
           console.log(BLOCK(`[JWForge State Validator] BLOCKED: Cannot advance to Phase 4 — no executor levels completed (phase3.completed_levels is empty).`));
           return;
         }

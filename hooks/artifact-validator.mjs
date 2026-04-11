@@ -20,16 +20,7 @@
 
 import { readFileSync, existsSync } from 'fs';
 import { join, basename } from 'path';
-import { readStdin, getCwd, readState, ALLOW, BLOCK, JWFORGE_DIR } from './lib/common.mjs';
-
-// --- Surface pipeline step-to-phase mapping (inline fallback) ---
-
-const SURFACE_PHASE_MAP = {
-  'interview': 1,
-  'plan': 2,
-  'execute': 3,
-  'verify': 4,
-};
+import { readStdin, getCwd, readState, ALLOW, BLOCK, JWFORGE_DIR, SURFACE_PHASE_MAP } from './lib/common.mjs';
 
 // --- Required artifacts per phase ---
 

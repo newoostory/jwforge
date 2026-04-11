@@ -83,7 +83,7 @@ async function main() {
 
       const message = catHeredocMatch?.[1] || standaloneHeredocMatch?.[1] || simpleMsgMatch?.[1] || '';
 
-      if (message && !message.includes(prefix)) {
+      if (message && !message.trimStart().startsWith(prefix)) {
         console.log(BLOCK(`[JWForge Git Guard] BLOCKED: Commit message must start with "${prefix}". Got: "${message.substring(0, 60)}...". Add the pipeline prefix to your commit message.`));
         return;
       }
