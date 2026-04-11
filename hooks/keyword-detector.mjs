@@ -32,8 +32,6 @@ const KEYWORDS = [
   { patterns: ['tdd', 'test first', '테스트 먼저'], mode: 'tdd', priority: 10 },
   // Verify mode
   { patterns: ['verify', 'check', '검증'], mode: 'verify', priority: 11 },
-  // Wiki skill
-  { patterns: ['/wiki', 'wiki', 'knowledge base', '위키', '지식베이스'], skill: 'wiki', priority: 8 },
 ];
 
 const MODE_MESSAGES = {

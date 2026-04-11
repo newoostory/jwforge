@@ -53,7 +53,7 @@ echo ""
 
 # --- 1. Remove skills ---
 
-for skill_name in jwforge deeptk surface cancel commit verify simplify wiki; do
+for skill_name in jwforge deeptk surface cancel commit verify simplify; do
   if [ -d "$CLAUDE_DIR/skills/$skill_name" ]; then
     rm -rf "$CLAUDE_DIR/skills/$skill_name"
     echo "[OK] /$skill_name skill removed"
