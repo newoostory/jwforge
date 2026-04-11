@@ -56,6 +56,13 @@ async function main() {
       return;
     }
 
+    // Steps 1-2 and 1-3: waiting for user interview input — let session end cleanly.
+    // The user's next message will be processed as interview answers automatically.
+    if (state.step === '1-2' || state.step === '1-3') {
+      console.log(ALLOW);
+      return;
+    }
+
     // Pipeline is in progress but LLM stopped — inject continuation
     const phaseNames = state.pipeline === 'deeptk' ? {
       1: 'Discover',
@@ -70,11 +77,7 @@ async function main() {
     };
     const phaseName = phaseNames[state.phase] || `Phase ${state.phase}`;
 
-    if (state.step === '1-3') {
-      console.log(BLOCK(`[JWForge] Waiting for user interview answers (step 1-3). Read .jwforge/current/interview-log.md — find the most recent Round's questions and re-display them exactly. Do NOT generate new questions. Just wait for user to answer.`));
-    } else {
-      console.log(BLOCK(`[JWForge] Pipeline is active (${phaseName}, step ${state.step}). Work is not complete. Continue from where you left off. Read .jwforge/current/state.json for current state.`));
-    }
+    console.log(BLOCK(`[JWForge] Pipeline is active (${phaseName}, step ${state.step}). Work is not complete. Continue from where you left off. Read .jwforge/current/state.json for current state.`));
   } catch (e) {
     logHookError('persistent-mode', e);
     console.log(ALLOW);

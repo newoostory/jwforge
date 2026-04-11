@@ -1307,14 +1307,24 @@ If task-spec.md exists:
   → Recreate Architecture team (TeamCreate + Architect)
 
 If interview-log.md exists but task-spec.md missing:
-  → Recreate Interview team (TeamCreate + Interviewer + Analyst + Researcher)
-  → Read interview-log.md to recover all Q&A history
-  → Resume from last completed round (state.phase1.interview_round)
-  → SendMessage to Interviewer with:
-       - Full interview history (all previous Q&A rounds from interview-log.md)
-       - Current round number: {state.phase1.interview_round + 1}
-       - "IMPORTANT: The above questions have ALREADY been asked and answered. Do NOT re-ask them. Generate only NEW questions targeting remaining gaps."
-  → Continue interview loop from where it left off
+  → Read interview-log.md to check last round's status
+
+  CASE A — Last round has questions but NO answers (user hasn't answered yet):
+    → The current user message IS the answer to that round.
+    → Treat the user's incoming message as answers to the most recent round's questions.
+    → Append answers to interview-log.md immediately (do NOT re-ask questions).
+    → Spawn Analyst subagent with the Q&A pairs to process.
+    → Continue from Step 1-3e (send to Analyst) immediately.
+
+  CASE B — Last round has both questions AND answers (session ended mid-processing):
+    → Recreate Interview team (TeamCreate + Interviewer + Analyst + Researcher)
+    → Read interview-log.md to recover all Q&A history
+    → Resume from last completed round (state.phase1.interview_round)
+    → SendMessage to Interviewer with:
+         - Full interview history (all previous Q&A rounds from interview-log.md)
+         - Current round number: {state.phase1.interview_round + 1}
+         - "IMPORTANT: The above questions have ALREADY been asked and answered. Do NOT re-ask them. Generate only NEW questions targeting remaining gaps."
+    → Continue interview loop from where it left off
 
 If neither exists:
   → Restart Phase 1 from Step 1-1
