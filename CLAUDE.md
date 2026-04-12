@@ -62,15 +62,39 @@ If it does, you are inside an active pipeline and MUST obey the rules below.
 | `.jwforge/archive/{name}/` | Pipeline archive | Pipeline end |
 | `.jwforge/knowledge/` | Learning DB | Ongoing |
 
+### 7. AGENT SPAWN REQUIREMENTS
+- ALL `Agent()` calls during active pipelines MUST include `run_in_background: true`.
+- This prevents agents from opening in separate tmux panes.
+- The Conductor is the ONLY entity that writes to `state.json`. Subagents report to the Conductor.
+
+### 8. USER WAIT FLAG
+- When the pipeline needs user input (e.g., interview answers), set `state.waiting_for_user = true` in state.json BEFORE presenting questions.
+- After receiving user input, set `state.waiting_for_user = false`.
+- The `persistent-mode.mjs` hook uses this flag to allow clean session ends during user waits.
+
+## Pipeline Files
+
+| File | Purpose | When Created |
+|------|---------|-------------|
+| `.jwforge/current/state.json` | Pipeline state | Phase 1 start |
+| `.jwforge/current/task-spec.md` | Requirements spec | Phase 1 end |
+| `.jwforge/current/architecture.md` | Design document | Phase 2 end |
+| `.jwforge/current/agent-log.jsonl` | Agent tracking | Ongoing |
+| `.jwforge/current/compact-snapshot.md` | Compaction backup | On context compact |
+| `.jwforge/archive/{name}/` | Pipeline archive | Pipeline end |
+| `.jwforge/knowledge/` | Learning DB | Ongoing |
+| `config/phase-config.json` | Phase/step definitions | Static config |
+
 ## Enforcement
 
 These rules are enforced by hooks in `hooks/`:
-- `pre-tool-guard.mjs` — Blocks Edit/Write during wrong phases
-- `bash-guard.mjs` — Blocks Bash file writes during wrong phases
+- `pre-tool-guard.mjs` — Blocks Edit/Write during wrong phases (5s timeout)
+- `bash-guard.mjs` — Blocks Bash file writes during wrong phases (safe redirects whitelisted: /dev/null, /tmp/*, .git/*)
 - `git-commit-guard.mjs` — Enforces commit prefix conventions
-- `state-validator.mjs` — Validates state.json transitions
-- `artifact-validator.mjs` — Validates required artifacts exist before phase transitions
-- `persistent-mode.mjs` — Prevents premature pipeline stops
+- `state-validator.mjs` — Validates state.json transitions, loads step definitions from `phase-config.json` (5s timeout)
+- `artifact-validator.mjs` — Validates required artifacts on phase-advancing writes only (skips non-phase-advancing writes for performance, 5s timeout)
+- `persistent-mode.mjs` — Prevents premature pipeline stops (uses `waiting_for_user` flag)
+- `on-stop.mjs` — Archives pipeline on session end; preserves team dirs and pipeline lock when status was `in_progress`
 - `pre-compact.mjs` — Preserves state during context compaction
 
 Hooks use `decision: "block"` to HARD BLOCK unauthorized actions. You cannot override hooks.
