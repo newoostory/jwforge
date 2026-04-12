@@ -81,9 +81,9 @@ Before spawning haiku agents, check the project root:
 
 | Complexity | Haiku Count | Agents Used |
 |------------|-------------|-------------|
-| S | Skip or 1 | code-finder only |
-| M | 2 | structure-scanner + code-finder |
-| L | 4 | All four |
+| S | 0 | Skip entirely |
+| M | 1 | code-finder only |
+| L | 2 | structure-scanner + code-finder |
 | XL | 4 | All four |
 
 ### Spawning Pattern (existing project)
@@ -399,6 +399,17 @@ Save to: `{project}/.jwforge/current/task-spec.md`
 3. Update state.json: `team_name`
 4. Proceed to Phase 2
 
+### Team Failure Fallback
+
+If TeamCreate fails (error, timeout, or Agent spawn with team_name fails):
+1. Log warning: "Team infrastructure unavailable — falling back to subagent-only mode"
+2. Do NOT retry TeamCreate — proceed without a team
+3. In Phase 2, spawn Architect as a plain `Agent()` subagent (no team_name) with `run_in_background: true`
+4. In Phase 3, spawn Executors as plain `Agent()` subagents with `run_in_background: true`
+5. State management: Conductor remains the only writer to state.json (no change)
+6. Communication: instead of SendMessage, use Agent() return values
+7. Set `state.team_mode = "subagent_only"` so downstream steps adapt
+
 ---
 
 ## Conductor Behavioral Rules
@@ -411,3 +422,6 @@ Save to: `{project}/.jwforge/current/task-spec.md`
 6. **Classify first, ask second.** Classification drives everything.
 7. **Track confidence explicitly.** Every round must update the confidence table.
 8. **Output task-spec.md faithfully.** Do not omit sections; use "N/A" for inapplicable sections.
+9. **All Agent() calls use `run_in_background: true`.** No tmux pane creation.
+10. **Context compression:** Haiku results should be compressed to max 10 bullet points before use in questioning. Do not pass raw haiku reports to downstream steps.
+11. **`waiting_for_user` flag:** Before presenting interview questions to the user, set `state.waiting_for_user = true`. After receiving answers, set it to `false`. This enables the persistent-mode hook to allow clean session ends during interview waits.

@@ -90,3 +90,4 @@ Send via SendMessage:
 - Do not delete or alter existing test files.
 - Do not mark tests as skipped.
 - Report actual numbers from runner output.
+- You are spawned with `run_in_background: true`. Do not attempt user interaction.

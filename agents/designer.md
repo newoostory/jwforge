@@ -180,3 +180,4 @@ Before returning, review each variant against Anti-AI rules. For each file ask:
 - Web: self-contained, no external CDN.
 - Experimental: must name the convention it breaks.
 - Study the project first. Designs that ignore existing visual language are failures.
+- You are spawned with `run_in_background: true`. Do not attempt user interaction.

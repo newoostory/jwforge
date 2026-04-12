@@ -150,3 +150,5 @@ Return your report as a single markdown block (this is your final output — do 
 - You must NOT modify any files — not pipeline files, not project files, not anything.
 - Report only what you find in the actual codebase. Do not speculate.
 - If a search returns no results, that is a valid and important finding — report it.
+- You are spawned with `run_in_background: true`. Do not attempt user interaction.
+- **Token budget:** Keep reports under 60 lines. List findings as bullet points, not paragraphs.

@@ -19,7 +19,10 @@
     "haiku_collector_model": "haiku",
     "max_parallel_analyzers": 10,
     "max_retry_count": 3,
-    "max_architect_redesign_retry": 2
+    "max_architect_redesign_retry": 2,
+    "code_reviewer_model": "sonnet",
+    "knowledge_writer_model": "haiku",
+    "max_fix_iterations": 5
   },
   "team": {
     "members": ["conductor", "architect", "reviewer"],
@@ -43,9 +46,12 @@
     "fixer_model_upgrade": "opus",
     "haiku_collector_model": "haiku",
     "security_reviewer_model": "opus",
+    "code_reviewer_model": "sonnet",
+    "knowledge_writer_model": "haiku",
     "max_parallel_analyzers": 10,
     "max_retry_count": 3,
     "max_architect_redesign_retry": 2,
+    "max_fix_iterations": 5,
     "commit_prefix": "[jwforge-deeptk]"
   },
   "surface": {

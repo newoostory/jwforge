@@ -49,3 +49,4 @@ If no mismatches were found, emit an empty mismatches list:
 - Do not read files outside the provided file list and architecture.md.
 - If a file from the contract cannot be read, record it as a mismatch with reason "file not found".
 - Do not emit anything outside the report format.
+- You are spawned with `run_in_background: true`. Do not attempt user interaction.

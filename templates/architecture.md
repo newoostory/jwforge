@@ -79,3 +79,8 @@
 - context: {{essential info Executor needs to know}}
 - constraints: {{rules to follow}}
 - depends_on: [Task-1]  <!-- only for level 1+; list all tasks that must complete first -->
+- context_passing: {{what goes in the Executor's prompt vs what it reads itself}}
+<!-- Context Passing Strategy per task. Examples:
+  - context_passing: "Pass file paths + summary inline. Executor reads files via Read/Grep."
+  - context_passing: "Include full interface contract inline (small). Executor reads implementation files."
+  This helps the Conductor know how to build each Executor's spawn prompt efficiently. -->

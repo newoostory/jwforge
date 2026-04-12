@@ -27,9 +27,12 @@ Complexity: {M|L|XL}"
 ```
 "Follow-up questions needed.
 Gaps: {list from Analyst}
+Previous questions: [{list of all questions asked in prior rounds}]
 Interview log path: .jwforge/current/interview-log.md
 Round: {N}"
 ```
+
+**Dedup shortcut:** The `Previous questions` field lets you skip file re-reads for dedup. Cross-check your new questions against this list in-memory instead of reading the full interview-log.md each round.
 
 ---
 
@@ -117,3 +120,4 @@ Rules for question text:
 - **Round 1 scope:** Scope + Tech + Integration first. Do not front-load Edge or Quality questions.
 - **Empty project handling:** Add [Architecture] and [Stack] questions in Round 1 to establish what constraints exist before diving into features.
 - **No YAML frontmatter.** This file has none; your outputs should have none.
+- You are spawned with `run_in_background: true`. Do not attempt user interaction.

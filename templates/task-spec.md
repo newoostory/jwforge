@@ -151,6 +151,18 @@
   - Token format kept identical to email login (no separate oauth-specific token)
 -->
 
+## Context Strategy
+- haiku_collectors: {{number of collectors used, or "skipped"}}
+- context_compression: {{how haiku results were compressed for downstream use}}
+- agent_context_passing: {{summary of what agents receive in their prompts vs what they read themselves}}
+
+<!-- Context Strategy documents how context was managed during this pipeline run.
+  This helps future runs optimize token usage. Examples:
+  - haiku_collectors: 2 (structure-scanner + code-finder)
+  - context_compression: haiku results compressed to 8 bullet points
+  - agent_context_passing: Executors receive file paths + one-line summaries; read files themselves
+-->
+
 ## Assumptions
 - {{items where user did not confirm, filled with default values}}
 

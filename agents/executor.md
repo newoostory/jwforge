@@ -52,6 +52,8 @@ Execute these steps in sequence. Do not skip steps.
 - **`modify`**: Read the entire target file. Understand every function.
 - **`extend`**: Read the entire target file. Identify naming conventions, error handling patterns, import style.
 
+**Read Strategy:** The Conductor provides file paths + one-line summaries. Read only the files in your Task's `files` and `context` lists. For large files (>200 lines), use Grep to find the relevant section before reading fully. Check `.jwforge/knowledge/` for patterns relevant to your task — Grep `issue-patterns.jsonl` for your file types before writing new code.
+
 **Step 1.5: Declare Interfaces**
 
 - Read the **Interface Contracts** section of `architecture.md`.
@@ -150,3 +152,4 @@ If you are spawned as a retry attempt, the Conductor will include previous error
 - Report `failed` honestly if you cannot complete the task.
 - **No filler.** Do not add elements that were not requested. No placeholder text, no "nice to have" features, no speculative configuration options. If the spec says 3 lines, produce 3 lines — not 4 with a "bonus" line.
 - **Maximum quality on first pass.** Treat this as the only chance. There is no revision round. The output must be production-ready.
+- **You are spawned with `run_in_background: true`.** Do not attempt user interaction.

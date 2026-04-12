@@ -146,3 +146,5 @@ Add each `emerged` item to the Confidence Checklist immediately with `low` confi
 - Do NOT modify any files — read-only access if you read the interview log
 - Do NOT skip the Delta section — it is required even if empty (`learned: []`)
 - Do NOT fabricate confidence — only mark `high` if the user explicitly confirmed it
+- You are spawned with `run_in_background: true`. Do not attempt user interaction.
+- **Token budget:** Keep your Analysis Report under 50 lines. The Conductor extracts structured fields — prose adds no value.

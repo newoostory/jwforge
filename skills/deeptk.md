@@ -27,6 +27,7 @@ When the user invokes `/deeptk <task description>`, drive it through the full pi
    - Phase 1 (Discover): **NO Plan Mode.** Relay interview questions directly in conversation.
    - Phase 2 done -> Phase 3 start: **Enter Plan Mode** to display the execution plan, then **immediately ExitPlanMode** before spawning any Executors. This is the ONLY window where Plan Mode is allowed.
    - Phase 3+ (Build/Validate): **NO Plan Mode.** Bypass permission must stay on for uninterrupted execution.
+10. **ALL agent spawns use `run_in_background: true`.** Every `Agent()` call — both subagents AND teammates — MUST include `run_in_background=true`. This prevents agents from opening in separate tmux windows. No exceptions.
 
 ---
 
@@ -50,8 +51,8 @@ DeepTK uses TWO sequential teams, not one persistent team:
 **Subagents (ephemeral, regular Agent tool):**
 - Phase 1: Reviewer (opus) — gap review
 - Phase 2: Researcher (sonnet) — feasibility, Reviewer (opus) — compliance
-- Phase 3: Designer (sonnet/opus), Executor (sonnet/opus), Mini-verifier (sonnet)
-- Phase 4: Analyzer (sonnet), Tester (sonnet), Spec-reviewer (sonnet), Security-reviewer (opus), Quality-reviewer (opus), Fixer (sonnet/opus)
+- Phase 3: Designer (sonnet/opus), Executor (sonnet/opus), Code Reviewer (sonnet/opus), Mini-verifier (sonnet)
+- Phase 4: Analyzer (sonnet), Tester (sonnet), Spec-reviewer (sonnet), Security-reviewer (opus), Quality-reviewer (opus), Fixer (sonnet/opus), Knowledge Writer (haiku)
 
 ```
 Phase 1: Discover (Interview Team)
@@ -75,6 +76,7 @@ Phase 2: Design (Architecture Team)
 
 Phase 3: Build (Architecture Team, recycled per level)
 ├─ Level-based parallel executor spawning
+├─ Per-executor code review (sonnet/opus subagent)
 ├─ Per-level mini-verification (sonnet subagent)
 ├─ Between levels: TeamDelete → TeamCreate → re-add Architect
 └─ Integration check after all levels
@@ -92,6 +94,20 @@ Phase 4: Validate (Architecture Team)
 ```
 
 **SendMessage constraint:** Always use explicit recipient names (e.g., `SendMessage(to="interviewer", ...)`). Do NOT use `SendMessage(to="*")` — Claude Code does not support broadcasting structured messages. Send individual messages to each teammate when needed.
+
+### Team Failure Fallback Mode
+
+If TeamCreate fails at any point (error, timeout, or subsequent Agent spawn with team_name fails):
+
+1. **Do NOT retry TeamCreate.** Proceed in subagent-only mode.
+2. Set `state.team_mode = "subagent_only"` in state.json.
+3. **Phase 1 adaptation:** Interviewer, Analyst, and Researcher become regular `Agent()` subagents (no team_name). Instead of SendMessage, pass context in the spawn prompt and collect results from Agent return values.
+4. **Phase 2 adaptation:** Architect becomes a regular `Agent()` subagent. Send design request as prompt context, not SendMessage.
+5. **Phase 3 adaptation:** Skip team recycle between levels (no TeamDelete/TeamCreate). Executors are already subagents.
+6. **Phase 4 adaptation:** No change — Phase 4 already uses subagents.
+7. Log: `"⚠ Team infrastructure unavailable — operating in subagent-only mode"`
+
+**All Agent() calls in fallback mode must include `run_in_background: true`.**
 
 ---
 
@@ -218,6 +234,7 @@ Spawn three teammates by reading their agent prompt files:
 ```
 1. Read agents/interviewer.md
    Agent(
+     run_in_background=true,
      name="interviewer",
      team_name="jwforge-deeptk-{task-slug}",
      prompt=<content of agents/interviewer.md + task context>
@@ -225,6 +242,7 @@ Spawn three teammates by reading their agent prompt files:
 
 2. Read agents/analyst.md
    Agent(
+     run_in_background=true,
      name="analyst",
      team_name="jwforge-deeptk-{task-slug}",
      prompt=<content of agents/analyst.md + task context>
@@ -232,6 +250,7 @@ Spawn three teammates by reading their agent prompt files:
 
 3. Read agents/researcher.md
    Agent(
+     run_in_background=true,
      name="researcher",
      team_name="jwforge-deeptk-{task-slug}",
      prompt=<content of agents/researcher.md + task context>
@@ -239,6 +258,12 @@ Spawn three teammates by reading their agent prompt files:
 ```
 
 Update state.json: `team_name: "jwforge-deeptk-{task-slug}"`
+
+**Team creation failure:** If TeamCreate or any teammate spawn fails, switch to subagent-only mode:
+- Set `state.team_mode = "subagent_only"` 
+- Skip SendMessage-based relay; instead pass context directly in Agent() prompts
+- Interviewer, Analyst, Researcher become plain Agent() subagents with `run_in_background: true`
+- Continue with Step 1-2b normally
 
 **Step 1-2b: Empty Project Detection**
 
@@ -257,6 +282,7 @@ For each collector:
   Agent(
     model="haiku",
     name="collector-{role}",
+    run_in_background=true,
     prompt=<collector prompt + task description + project root>
   )
 ```
@@ -275,7 +301,9 @@ For each collector:
 | Agent timeout/error | Retry with haiku (max 3 times) |
 | 2+ of 4 agents fail | Proceed with remaining results |
 
-Collect all haiku reports. Update state.json: `step: "1-3"`
+Collect all haiku reports. **Compress results:** Summarize each report to 5-10 bullet points of actionable findings. Strip raw file listings and verbose descriptions. The compressed summary is what gets passed to the Interviewer, not the raw reports.
+
+Update state.json: `step: "1-3"`
 
 ### Step 1-3: Interview Relay Loop
 
@@ -300,9 +328,15 @@ Interviewer sends back structured questions via SendMessage. Conductor receives 
 
 **c. Present Questions to User**
 
-Format the Interviewer's questions for the user and display them. Wait for user answers.
+Format the Interviewer's questions for the user and display them.
+
+**Before presenting:** Set `state.waiting_for_user = true` in state.json. This allows the persistent-mode hook to let the session end cleanly while waiting for user input.
+
+Wait for user answers.
 
 **d. User Answers + Write to Interview Log**
+
+**After receiving answers:** Set `state.waiting_for_user = false` in state.json.
 
 After receiving user answers, append this round to `.jwforge/current/interview-log.md`:
 
@@ -413,6 +447,7 @@ Read agents/reviewer.md -> extract "Phase 1: Interview Gap Review" section
 Agent(
   model="opus",
   name="reviewer-phase1",
+  run_in_background=true,
   prompt=<Phase 1 section from agents/reviewer.md
     + all interview Q&A (from interview-log.md)
     + current confidence checklist>
@@ -464,6 +499,8 @@ Estimated agents:
 - Analyzers (sonnet): ~{N} (1 per file)
 - Tester (sonnet): 1
 - Fixer (if needed): 1-2
+- Code Reviewers (sonnet/opus): ~{N} (1 per executor, may re-run once)
+- Knowledge Writers (haiku): ~{N} (1 per fix/review finding)
 ```
 
 For all complexities (M/L/XL): display estimate and auto-proceed. No confirmation required.
@@ -476,6 +513,7 @@ For all complexities (M/L/XL): display estimate and auto-proceed. No confirmatio
 3. Read agents/architect.md
 4. Agent(
      model="opus",
+     run_in_background=true,
      name="architect",
      team_name="jwforge-deeptk-{task-slug}",
      prompt=<content of agents/architect.md + task context summary>
@@ -528,6 +566,7 @@ Read agents/researcher.md -> extract Phase 2 section
 Agent(
   model="sonnet",
   name="researcher-phase2",
+  run_in_background=true,
   prompt=<Phase 2 section from agents/researcher.md
     + "architecture.md path: .jwforge/current/architecture.md"
     + "task-spec.md path: .jwforge/current/task-spec.md">
@@ -559,6 +598,7 @@ Read agents/reviewer.md -> extract "Phase 2: Architecture-Spec Compliance Review
 Agent(
   model="opus",
   name="reviewer-phase2",
+  run_in_background=true,
   prompt=<Phase 2 section from agents/reviewer.md
     + "task-spec.md path: .jwforge/current/task-spec.md"
     + "architecture.md path: .jwforge/current/architecture.md">
@@ -641,6 +681,7 @@ For each task with `design_required: true`:
 3. Agent(
      model=<designer_model>,
      name="designer-{task-number}",
+     run_in_background=true,
      prompt=<content of agents/designer.md + task details + task-spec path>
    )
 4. Designer returns design variants
@@ -660,6 +701,7 @@ For each task in this level:
   Agent(
     model=<task.model>,
     name="executor-{task-number}",
+    run_in_background=true,
     description="Level {N}: {one-line task summary}",
     prompt=<content of agents/executor.md + assigned task details
            + (if design selected) "Selected design: {path}. Implement according to this design."
@@ -686,6 +728,32 @@ Each Executor returns:
 - issues: {problems, or none}
 ```
 
+**c2. Per-Executor Code Review**
+
+For each executor that returned `status: done` or `status: partial`:
+```
+Read agents/code-reviewer.md
+Agent(
+  model=<code_reviewer_model from settings.json, or match executor's model>,
+  run_in_background=true,
+  prompt=<content of agents/code-reviewer.md
+         + executor report
+         + Task section from architecture.md
+         + files changed list
+         + "architecture.md path: .jwforge/current/architecture.md">
+)
+```
+
+Spawn ALL code reviewers for the same level IN PARALLEL (`run_in_background: true`).
+Wait for all background notifications to arrive before proceeding to mini-verification.
+
+**Revision handling:**
+- verdict: `pass` → proceed to mini-verification
+- verdict: `revise` → re-spawn the executor with `revision_notes` appended to prompt
+  - Max 1 revision per executor per level
+  - After revision: re-run code review
+  - If second review still `revise` → proceed anyway, pass issues to mini-verifier
+
 **d. Per-Level Mini-Verification**
 
 After all executors in a level return, spawn mini-verifier (sonnet, regular Agent):
@@ -694,6 +762,7 @@ After all executors in a level return, spawn mini-verifier (sonnet, regular Agen
 Agent(
   model="sonnet",
   name="mini-verifier-level-{N}",
+  run_in_background=true,
   prompt="Verify Level {N} structural integrity:
   - Created files: {list from executor reports} — confirm they exist using Glob
   - Exports from architecture.md: {expected exports} — confirm they're present using Grep
@@ -718,13 +787,27 @@ Update state.json: current_level++, add level to completed_levels
 
 **f. Team Recycle Between Levels**
 
+**Architect Context Serialization (before TeamDelete):**
+Write `.jwforge/current/architect-context.md` with:
+- Completed levels summary (files, exports, deviations)
+- Aggregated executor reports
+- Redesign history (if any)
+- Interface contract satisfaction status
+- Active concerns/warnings
+
 ```
 TeamDelete("jwforge-deeptk-{task-slug}") — clean up stale team state
 TeamCreate("jwforge-deeptk-{task-slug}") — fresh team for next level
 Re-add Architect teammate with fresh context including previous level results
 ```
 
-**Why:** Claude Code's team state can become inconsistent between levels. Delete-then-recreate ensures clean state for each level.
+**Architect Context Loading (after TeamCreate):**
+If `.jwforge/current/architect-context.md` exists:
+  Read it and include in the Architect's spawn prompt as additional context.
+
+**Why:** Claude Code's team state can become inconsistent between levels. Delete-then-recreate ensures clean state for each level. The architect-context.md artifact preserves design continuity across team recycles.
+
+**Team recycle failure:** If TeamDelete or TeamCreate fails during level transition, switch to subagent-only mode for remaining levels. Set `state.team_mode = "subagent_only"`. Log warning but do NOT stop the pipeline. Architect becomes a plain Agent() subagent for subsequent levels.
 
 **g. Prepare Handoff for Next Level**
 
@@ -741,6 +824,7 @@ Spawn integration-checker subagent (opus):
 Agent(
   model="opus",
   name="integration-checker",
+  run_in_background=true,
   prompt="Verify all modules connect correctly:
   - Check imports/exports across all levels
   - Verify data flow matches architecture.md
@@ -828,6 +912,7 @@ Read agents/contract-validator.md
 Agent(
   model="sonnet",
   name="contract-validator",
+  run_in_background=true,
   prompt=<content of agents/contract-validator.md
          + "architecture.md path: .jwforge/current/architecture.md"
          + "modified files: {list of all created/modified files from Phase 3}">
@@ -852,6 +937,7 @@ For each file (batched if >10):
   Agent(
     model="sonnet",
     name="analyzer-{N}",
+    run_in_background=true,
     prompt=<content of agents/analyzer.md + file path + architecture context>
   )
 ```
@@ -889,6 +975,7 @@ Read agents/tester.md
 Agent(
   model="sonnet",
   name="tester",
+  run_in_background=true,
   prompt=<content of agents/tester.md + task-spec path + analyzer summary + test env info>
 )
 ```
@@ -937,6 +1024,7 @@ Spawn spec-reviewer subagents in parallel (1 per modified file, sonnet, max 10 b
 Agent(
   model="sonnet",
   name="spec-reviewer-{N}",
+  run_in_background=true,
   prompt="You are a Spec Compliance Reviewer. Your ONLY job is to verify
   the implementation matches the specification. You do NOT review code quality.
 
@@ -975,6 +1063,7 @@ Update state.json: add `"spec_compliance"` to `phase4.stages_completed`
 Agent(
   model="opus",
   name="security-reviewer",
+  run_in_background=true,
   prompt="You are a Security Reviewer. Focus ONLY on security issues:
   - Injection vulnerabilities (command, SQL, XSS, path traversal)
   - Hardcoded secrets, credentials, API keys
@@ -1010,6 +1099,7 @@ Read agents/reviewer.md -> extract "Phase 4: Implementation Verification Review"
 Agent(
   model="opus",
   name="reviewer-phase4",
+  run_in_background=true,
   prompt=<Phase 4 section from agents/reviewer.md
     + "task-spec.md path: .jwforge/current/task-spec.md"
     + "architecture.md path: .jwforge/current/architecture.md"
@@ -1071,6 +1161,7 @@ Read agents/fixer.md
 Agent(
   model="sonnet",
   name="fixer-{N}",
+  run_in_background=true,
   prompt=<content of agents/fixer.md
          + failure details
          + affected files
@@ -1110,8 +1201,30 @@ Fixer (sonnet) → fix → git commit [jwforge-deeptk] fix: {desc} → re-run te
 - Full test suite re-run after every fix (regression check)
 - Warnings and suggestions do NOT trigger fix loop
 - Every fix attempt = git commit with `[jwforge-deeptk]` prefix
+- **Max 5 total fix iterations across all stages.** After 5 total fixes, escalate to user: "Fix loop limit reached (5 iterations). Remaining issues: {list}. Manual intervention needed."
 
 Update state.json: `phase4.fix_loop_count++`
+
+**Knowledge Base Population (after Fix Loop or Review stage):**
+
+When a Fixer returns with `status: done` and `root_cause` identified, OR
+when a Review stage produces `critical_issues` or patterns:
+
+```
+Read agents/knowledge-writer.md
+Agent(
+  model="haiku",
+  run_in_background=true,
+  prompt=<content of agents/knowledge-writer.md
+         + finding_type: "fixer_root_cause" | "review_pattern" | "security_finding"
+         + source_report: <the fixer or reviewer report text>
+         + "pipeline: deeptk"
+         + "jsonl_path: .jwforge/knowledge/issue-patterns.jsonl"
+         + "review_md_path: .jwforge/knowledge/review-additions.md">
+)
+```
+
+Knowledge Writer runs in background (`run_in_background: true`). Non-blocking — do not wait for completion before continuing the fix loop or review flow.
 
 ### Step 4-6: Completion + Final Report
 
@@ -1221,6 +1334,8 @@ After Phase 4 completion:
   "type": "new-feature|bug-fix|refactor|config|docs",
   "status": "in_progress|done|stopped|error",
   "team_name": "jwforge-deeptk-{task-slug}",
+  "team_mode": "team|subagent_only",
+  "waiting_for_user": false,
   "empty_project": false,
   "phase1": {
     "status": "pending|in_progress|done",
@@ -1388,7 +1503,7 @@ Team agents are NOT persistent across sessions. On resume:
 | Aspect | M (Medium) | L (Large) | XL (Complex) |
 |--------|-----------|-----------|---------------|
 | Interview rounds | 2-3 | 3+ | Unlimited |
-| Haiku collectors | 4 (all) | 4 (all) | 4 (all) |
+| Haiku collectors | 2 (structure + code) | 3 (structure + code + pattern) | 4 (all) |
 | Phase 2 user review | Auto-proceed | Show summary | Auto-proceed |
 | Cost estimate | Show + auto-proceed | Show + auto-proceed | Show + auto-proceed |
 | Phase 3 worktree | No | Optional (3+ executors) | Optional (3+ executors) |
@@ -1432,3 +1547,5 @@ The Conductor's core loop for all team interactions:
 - Code review judgments
 - Interview question generation
 - Confidence tracking
+
+**State Write Safety:** The Conductor is the ONLY entity that writes to state.json. Executor reports, Analyst confidence updates, Reviewer verdicts — all flow to the Conductor who updates state. This prevents parallel write collisions. Team agents and subagents NEVER write to state.json directly.

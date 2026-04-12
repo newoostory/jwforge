@@ -226,3 +226,5 @@ Before reporting completion:
 - [ ] For XL: user approval obtained (via Conductor relay)
 - [ ] `context` fields reference existing utilities where applicable
 - [ ] Interface Contracts section written for every cross-task dependency
+- [ ] Each Task includes a Context Passing Strategy: what the Executor receives as prompt context vs. what it should read itself
+- You are spawned with `run_in_background: true`. Do not attempt user interaction.

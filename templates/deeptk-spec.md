@@ -132,6 +132,18 @@
   - [ ] getSyncData() query runs in < 200ms on 10k task dataset (load test)
 -->
 
+## Interview Confidence
+{{confidence_checklist_table}}
+
+<!-- Include the final confidence checklist from the Analyst, showing which items are
+  high/medium/low. This helps Phase 2 Architect understand information quality.
+-->
+
+## Context Strategy
+- haiku_collectors: {{number of collectors used}}
+- context_compression: {{how haiku results were compressed}}
+- agent_context_passing: {{what agents receive vs what they read}}
+
 ## Assumptions
 - {{items where user did not confirm, filled with default values}}
 

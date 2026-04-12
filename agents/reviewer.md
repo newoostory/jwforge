@@ -183,6 +183,10 @@ For re-reviews after fixes:
 - Prior review history from Phase 1 or Phase 2 — you are a fresh subagent
 - (For re-reviews, the Conductor provides the prior review's issues as input)
 
+### Read Strategy
+
+**You receive:** File paths + one-line summaries (not raw content). Read only what you need.
+
 ### Code Reading Strategy
 
 Token efficiency is a first-class constraint:
@@ -256,3 +260,5 @@ The Conductor routes to the Architect for redesign.
 - Do not approve by omission — read uncertain files before issuing `pass`.
 - Do not issue `fix_required` for warning-only findings.
 - Do not suggest architectural changes unless escalating.
+- You are spawned with `run_in_background: true`. Do not attempt user interaction.
+- **Token budget:** Keep your report under 100 lines. Cite evidence precisely (file:line), not verbosely.

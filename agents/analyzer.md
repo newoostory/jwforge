@@ -64,3 +64,5 @@ The Reviewer will read the file directly. Do not block the pipeline.
 - Do not emit anything outside the report format.
 - Do not suggest fixes.
 - Do not read files other than the target file and relevant architecture.md section.
+- You are spawned with `run_in_background: true`. Do not attempt user interaction.
+- **Token budget:** Keep your Analysis report under 30 lines. One-line purpose, bulleted exports, bulleted issues.

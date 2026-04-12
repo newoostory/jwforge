@@ -27,6 +27,7 @@ When the user invokes `/deep <task description>`, you take that task and drive i
    - Phase 1 (Interview): **NO Plan Mode.** Ask questions directly in conversation.
    - Phase 2 done → Phase 3 start: **Enter Plan Mode** to display the execution plan, then **immediately ExitPlanMode** before spawning any Executors. This is the ONLY window where Plan Mode is allowed.
    - Phase 3+ (Execution): **NO Plan Mode.** Bypass permission must stay on for uninterrupted execution.
+9. **ALL agent spawns use `run_in_background: true`.** Every `Agent()` call — both subagents AND teammates — MUST include `run_in_background=true`. This prevents agents from opening in separate tmux windows. No exceptions.
 
 ---
 
@@ -143,9 +144,9 @@ Check the project root for source files (`.ts`, `.js`, `.py`, `.go`, `.rs`, `.ja
 
 | Complexity | Haiku Count | Agents |
 |-----------|-------------|--------|
-| S | Skip or 1 (code-finder only) | Minimal |
-| M | 2 (structure-scanner + code-finder) | Basic |
-| L | 4 (all) | Full |
+| S | 0 (skip entirely — S tasks don't need context collection) | None |
+| M | 1 (code-finder only) | Minimal |
+| L | 2 (structure-scanner + code-finder) | Basic |
 | XL | 4 (all) | Full |
 
 **Read the agent prompt files and spawn haiku agents in parallel:**
@@ -173,7 +174,7 @@ For each required collector agent:
 | Agent timeout/error | Retry with haiku (max 3 times) |
 | 2+ of 4 agents fail | Proceed with remaining results, supplement via questions |
 
-Collect all haiku reports. Update state.json: `step: "1-3"`
+Collect all haiku reports. Compress haiku results to max 10 bullet points before use in questioning. Strip raw file listings — keep only actionable findings. Update state.json: `step: "1-3"`
 
 ### Step 1-3: Structured Questioning (Conductor)
 
@@ -189,12 +190,16 @@ Synthesize context collection results + task classification to generate question
 | 5 | Priority | Core vs nice-to-have | L+ only |
 
 **Question rules:**
-- Max 5 questions per round
+- Max 3 questions per round for S/M. Max 5 for L/XL.
 - Format: `[N/Category] Question text`
 - Don't re-ask what haiku already confirmed; just verify: "The project uses ESM, correct?"
 - If user says "just start" or equivalent -> fill remaining with reasonable defaults
 
+**Before presenting questions to user:** set `state.waiting_for_user = true` in state.json.
+
 **Present questions to the user and wait for answers.**
+
+**After receiving user answers:** set `state.waiting_for_user = false` in state.json.
 
 ### Step 1-3b: Inter-Round Learning (Delta + Confidence)
 
@@ -254,6 +259,7 @@ After the completion check passes, BEFORE generating task-spec.md, spawn a Revie
 Read agents/reviewer.md -> extract the "Phase 1: Interview Gap Review" section
 Agent(
   model="opus",
+  run_in_background=true,
   name="reviewer-phase1",
   prompt=<Phase 1 section from agents/reviewer.md
     + all interview question-answer pairs
@@ -336,13 +342,16 @@ For all complexities (M/L/XL): display the estimate and auto-proceed. No confirm
    ```
    Agent(
      model="opus",
+     run_in_background=true,
      name="architect",
      team_name="jwforge-{task-slug}",
      prompt=<content of agents/architect.md + task context>
    )
    ```
 
-Update state.json: `team_name: "jwforge-{task-slug}"`
+**Team creation fallback:** If TeamCreate fails, proceed without a team. Spawn Architect as a plain Agent() subagent with `run_in_background=true` instead of a teammate. Set `state.team_mode = "subagent_only"`. In subagent_only mode, replace all `SendMessage(to="architect", ...)` calls with new Agent() spawns passing the Architect prompt + accumulated context. The pipeline continues normally otherwise.
+
+Update state.json: `team_name: "jwforge-{task-slug}"` (or `team_name: null, team_mode: "subagent_only"` if fallback)
 
 ---
 
@@ -418,6 +427,7 @@ After the Architect completes architecture.md, BEFORE proceeding to Phase 3, spa
 Read agents/reviewer.md -> extract the "Phase 2: Architecture-Spec Compliance Review" section
 Agent(
   model="opus",
+  run_in_background=true,
   name="reviewer-phase2",
   prompt=<Phase 2 section from agents/reviewer.md
     + "task-spec.md path: .jwforge/current/task-spec.md"
@@ -437,6 +447,7 @@ Agent(
   // After Architect reports back with redesigned architecture.md:
   Agent(
     model="opus",
+    run_in_background=true,
     name="reviewer-phase2-recheck",
     prompt=<Phase 2 section from agents/reviewer.md
       + task-spec.md path + architecture.md path>
@@ -467,7 +478,7 @@ Update state.json: `phase2.status: "done"`, `phase: 3`, `step: "3-1"`
 **S complexity (Phase 2 was skipped):**
 - No team exists. Spawn single sonnet Executor via Agent tool (regular subagent):
   ```
-  Agent(model="sonnet", prompt=<executor.md + full task-spec content>)
+  Agent(model="sonnet", run_in_background=true, prompt=<executor.md + full task-spec content>)
   ```
 - Skip Steps 3-2 through 3-5. Go directly to Step 3-6.
 - Executor still follows the standard report format.
@@ -484,6 +495,7 @@ For each level (0, 1, 2, ...):
   3. Spawn Executor subagents for all tasks in this level IN PARALLEL:
      Agent(
        model=<task.model>,
+       run_in_background=true,
        name="executor-{task-number}",
        prompt=<content of agents/executor.md + assigned task details
               + (if design was selected) "Selected design: {path}. Implement according to this design."
@@ -523,6 +535,7 @@ This flow runs for each task that has `design_required: true` in architecture.md
 4. Spawn Designer sub-agent:
    Agent(
      model=<designer_model from settings>,
+     run_in_background=true,
      name="designer-{task-number}",
      prompt=<content of agents/designer.md
        + task details from architecture.md (task number, description, context, constraints)
@@ -538,6 +551,7 @@ This flow runs for each task that has `design_required: true` in architecture.md
    b. Conductor spawns a fresh Reviewer sub-agent for design evaluation:
       Agent(
         model="sonnet",
+        run_in_background=true,
         name="design-reviewer-{task-number}",
         prompt="Evaluate these design variants for Task-{N}.
         Design files: {paths}
@@ -616,9 +630,10 @@ When Level N completes -> before starting Level N+1:
 
 1. Collect all Level N Executor Reports (from Agent return values)
 2. **File existence verification:** For each `files_created` and `files_modified` in reports, use Glob to confirm the files actually exist. If a file is missing, treat the Executor report as `partial` and trigger retry.
-3. Check for `partial` or `failed` -> branch to Step 3-7
-4. Summarize all `exports` -> include in Level N+1 Executor prompts
-5. Spawn Level N+1 Executor subagents
+3. **Code review per Executor (M/L/XL only):** After each Executor returns `done`, spawn a code-reviewer subagent (read `agents/code-reviewer.md`) to catch issues early before they propagate to the next level. Run all code-reviewers for the level in parallel. If critical issues found, feed them back to the Executor for immediate fix before proceeding.
+4. Check for `partial` or `failed` -> branch to Step 3-7
+5. Summarize all `exports` -> include in Level N+1 Executor prompts
+6. Spawn Level N+1 Executor subagents
 
 **Info passed to next level (summarized, NOT raw reports):**
 - Files created/modified in previous level (verified to exist)
@@ -710,6 +725,7 @@ For each file (batched if >10):
   Read agents/analyzer.md
   Agent(
     model="sonnet",
+    run_in_background=true,
     name="analyzer-{N}",
     prompt=<content of agents/analyzer.md + file path + architecture context>
   )
@@ -751,6 +767,7 @@ Before spawning the Tester, Conductor checks for an existing test environment:
 Read agents/tester.md
 Agent(
   model="sonnet",
+  run_in_background=true,
   name="tester",
   prompt=<content of agents/tester.md + task-spec path + analyzer summary + test env info>
 )
@@ -788,11 +805,13 @@ Code review is split into two independent stages that run sequentially.
 Stage 1 catches spec/contract violations early. Stage 2 catches quality issues.
 Both must pass before completion.
 
-**S complexity: Skip this step.** Go to Step 4-6.
+**S complexity:** Skip this step entirely (skip both Stage 1 and Stage 2). Go to Step 4-6.
+
+**M complexity:** Merge spec compliance (Stage 1) and quality review (Stage 2) into a single reviewer pass. Spawn one Reviewer subagent (opus) that checks both spec compliance and code quality together, instead of running two sequential stages. Skip the per-file sonnet spec-reviewers — the single opus reviewer handles all files.
 
 ---
 
-#### Stage 1: Spec Compliance Review (sonnet, per-file)
+#### Stage 1: Spec Compliance Review (sonnet, per-file) — L/XL only (M uses merged pass above)
 
 **Purpose:** Does the code do what task-spec.md and architecture.md say it should?
 
@@ -801,6 +820,7 @@ Spawn spec-reviewer subagents in parallel (1 per modified file, sonnet, max 10 b
 ```
 Agent(
   model="sonnet",
+  run_in_background=true,
   name="spec-reviewer-{N}",
   prompt="You are a Spec Compliance Reviewer. Your ONLY job is to verify that
   the implementation matches the specification. You do NOT review code quality.
@@ -834,7 +854,7 @@ If all pass → proceed to Stage 2.
 
 ---
 
-#### Stage 2: Code Quality Review (Reviewer subagent, opus)
+#### Stage 2: Code Quality Review (Reviewer subagent, opus) — L/XL only (S skips entirely; M uses merged pass above)
 
 **Purpose:** Is the code well-written, secure, and maintainable?
 
@@ -844,6 +864,7 @@ Spawn a Reviewer subagent for code quality review:
 Read agents/reviewer.md -> extract the "Phase 4: Implementation Verification Review" section
 Agent(
   model="opus",
+  run_in_background=true,
   name="reviewer-phase4",
   prompt=<Phase 4 section from agents/reviewer.md
     + "task-spec.md path: .jwforge/current/task-spec.md"
@@ -906,6 +927,7 @@ Spawn Fixer subagent:
 Read agents/fixer.md
 Agent(
   model="sonnet",  // upgraded to opus on 2nd attempt
+  run_in_background=true,
   name="fixer-{N}",
   prompt=<content of agents/fixer.md + failure details + affected files>
 )
@@ -936,6 +958,8 @@ Fixer subagent (sonnet) -> fix -> git commit -> re-run tests
               +-- Pass -> spawn Reviewer subagent for re-review or Step 4-6
               +-- Fail after 2 more attempts -> STOP Phase 4, report to user
 ```
+
+**Knowledge capture:** After Fixer returns with a root_cause, spawn a knowledge-writer subagent (read `agents/knowledge-writer.md`, model=haiku, run_in_background=true) to record the issue pattern in `.jwforge/knowledge/issue-patterns.jsonl` so future pipelines can avoid the same mistake.
 
 **Fix principles:**
 - Fixer only touches files related to the failure/issue
@@ -1011,6 +1035,8 @@ After Phase 4 completion:
 3. Write the COMPLETE JSON back
 4. Verify: Read it back immediately after writing
 ```
+
+**State Write Batching:** Combine multiple state updates into single writes where possible. Example: instead of writing `step` then `phase1.interview_round` separately, update both fields and write once. This reduces file I/O and avoids intermediate inconsistent states.
 
 ### Full state.json Schema
 
