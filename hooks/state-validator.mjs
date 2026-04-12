@@ -13,11 +13,11 @@
  * Only triggers when writing to state.json. Other files pass through.
  */
 
-import { existsSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
 import { readStdin, getCwd, readState, ALLOW, ALLOW_MSG, BLOCK, JWFORGE_DIR, logHookError } from './lib/common.mjs';
 
-const VALID_STEPS = {
+const HARDCODED_VALID_STEPS = {
   deep: ['1-1','1-2','1-3','1-3b','1-4','1-5','1-5b','1-6','1-6a','1-6b',
          '2-1','2-2','2-2b',
          '3-1','3-2','3-2b','3-3','3-4','3-5','3-6','3-7',
@@ -28,6 +28,28 @@ const VALID_STEPS = {
            '4-1','4-1b','4-2','4-3','4-3a','4-3b','4-4','4-5','4-6','4-7'],
   surface: ['analyze','plan','implement','verify']
 };
+
+function loadValidSteps() {
+  try {
+    const configPath = join(getCwd(), 'config', 'phase-config.json');
+    if (!existsSync(configPath)) return HARDCODED_VALID_STEPS;
+    const config = JSON.parse(readFileSync(configPath, 'utf8'));
+    if (!config?.pipelines || typeof config.pipelines !== 'object') return HARDCODED_VALID_STEPS;
+    const result = {};
+    for (const [pipelineName, pipelineData] of Object.entries(config.pipelines)) {
+      if (Array.isArray(pipelineData?.phases)) {
+        result[pipelineName] = pipelineData.phases.flatMap(p =>
+          Array.isArray(p?.steps) ? p.steps.map(s => s.step).filter(Boolean) : []
+        );
+      }
+    }
+    return Object.keys(result).length > 0 ? result : HARDCODED_VALID_STEPS;
+  } catch {
+    return HARDCODED_VALID_STEPS;
+  }
+}
+
+const VALID_STEPS = loadValidSteps();
 
 async function main() {
   try {
@@ -195,6 +217,24 @@ async function main() {
         const completedLevels = currentState.phase3?.completed_levels;
         if (!Array.isArray(completedLevels) || completedLevels.length === 0) {
           console.log(BLOCK(`[JWForge State Validator] BLOCKED: Cannot advance to Phase 4 — no executor levels completed (phase3.completed_levels is empty).`));
+          return;
+        }
+      }
+    }
+
+    // === RULE 9: Resume gap check — warn if phase3.completed_levels has gaps ===
+    if (oldStatus === 'stopped' && newStatus === 'in_progress') {
+      const completedLevels = currentState.phase3?.completed_levels;
+      if (Array.isArray(completedLevels) && completedLevels.length > 1) {
+        const sorted = [...completedLevels].sort((a, b) => a - b);
+        const gaps = [];
+        for (let i = 1; i < sorted.length; i++) {
+          if (sorted[i] !== sorted[i - 1] + 1) {
+            gaps.push(`${sorted[i - 1] + 1}..${sorted[i] - 1}`);
+          }
+        }
+        if (gaps.length > 0) {
+          console.log(ALLOW_MSG(`[JWForge State Validator] WARNING: Resuming pipeline but phase3.completed_levels has gaps (${JSON.stringify(sorted)}). Missing levels: ${gaps.join(', ')}. Verify this is intentional before proceeding.`));
           return;
         }
       }

@@ -41,6 +41,9 @@ const FILE_WRITE_PATTERNS = [
   /\bpnpm\s+add/,                        // pnpm add
 ];
 
+// Redirect/write targets that are always safe to write to regardless of phase
+const SAFE_REDIRECT_PREFIXES = ['/dev/null', '/dev/stdout', '/dev/stderr', '/tmp/', '.git/'];
+
 // Commands that are always safe (read-only operations)
 const SAFE_PATTERNS = [
   /^\s*git\s+(status|log|diff|show|branch|tag|remote|rev-parse|describe)/,
@@ -77,6 +80,28 @@ function isFileWriteCommand(command) {
   return FILE_WRITE_PATTERNS.some(p => p.test(command));
 }
 
+// Extract explicit write targets from redirect operators and tee
+function extractWriteTargets(command) {
+  const targets = [];
+  for (const m of command.matchAll(/>>?\s*["']?([^\s"';&|]+)/g)) {
+    targets.push(m[1]);
+  }
+  for (const m of command.matchAll(/\btee\s+(?:-[a-z]\s+)*["']?([^\s"';&|]+)/g)) {
+    targets.push(m[1]);
+  }
+  return targets;
+}
+
+// Returns true only if ALL detected write targets are on the safe whitelist.
+// Returns false (not safe) if no targets were detected — commands like `cp` or
+// `sed -i` write to paths not extractable by redirect regex, so fall through to
+// normal blocking logic.
+function hasOnlySafeWriteTargets(command) {
+  const targets = extractWriteTargets(command);
+  if (targets.length === 0) return false;
+  return targets.every(t => SAFE_REDIRECT_PREFIXES.some(prefix => t.startsWith(prefix)));
+}
+
 async function main() {
   try {
     const raw = await readStdin();
@@ -95,7 +120,7 @@ async function main() {
     const lockData = checkPipelineLock(cwd);
     if (lockData) {
       // Only block file-writing commands, not read-only ones
-      if (isFileWriteCommand(command) && !isWritingToPipelineArtifact(command, cwd)) {
+      if (isFileWriteCommand(command) && !isWritingToPipelineArtifact(command, cwd) && !hasOnlySafeWriteTargets(command)) {
         console.log(BLOCK(`[JWForge Bash Guard] BLOCKED: Pipeline /${lockData.pipeline || 'deep'} was triggered but state.json not initialized. Follow the pipeline protocol first. No file modifications until pipeline is properly started.`));
         return;
       }
@@ -116,6 +141,12 @@ async function main() {
 
     // Check if this is a file-writing command
     if (!isFileWriteCommand(command)) {
+      console.log(ALLOW);
+      return;
+    }
+
+    // If all detected write targets are safe (e.g. /dev/null, /tmp/, .git/), allow
+    if (hasOnlySafeWriteTargets(command)) {
       console.log(ALLOW);
       return;
     }
