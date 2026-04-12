@@ -1,0 +1,177 @@
+{
+  "version": 1,
+  "pipelines": {
+    "deep": {
+      "phases": [
+        {
+          "phase": 1,
+          "name": "Deep Interview",
+          "steps": [
+            {"step": "1-1", "name": "classify", "description": "Task classification and haiku context collection"},
+            {"step": "1-2", "name": "interview_questions", "description": "Present interview questions to user"},
+            {"step": "1-3", "name": "collect_answers", "description": "Collect haiku reports and analyze answers"},
+            {"step": "1-3b", "name": "followup_round", "description": "Follow-up interview round"},
+            {"step": "1-4", "name": "write_spec", "description": "Write task-spec.md"},
+            {"step": "1-5", "name": "research_validate", "description": "Researcher validates spec"},
+            {"step": "1-5b", "name": "research_fix", "description": "Fix spec issues from researcher"},
+            {"step": "1-6", "name": "review", "description": "Reviewer checks spec quality"},
+            {"step": "1-6a", "name": "review_fix", "description": "Fix spec issues from reviewer"},
+            {"step": "1-6b", "name": "review_pass", "description": "Reviewer confirms spec pass"}
+          ],
+          "required_artifacts": [],
+          "user_wait_steps": ["1-2", "1-3"]
+        },
+        {
+          "phase": 2,
+          "name": "Architecture",
+          "steps": [
+            {"step": "2-1", "name": "design", "description": "Architect designs architecture.md"},
+            {"step": "2-2", "name": "research_validate", "description": "Researcher validates architecture"},
+            {"step": "2-2b", "name": "research_fix", "description": "Fix architecture issues from researcher"}
+          ],
+          "required_artifacts": ["task-spec.md"],
+          "user_wait_steps": []
+        },
+        {
+          "phase": 3,
+          "name": "Execute",
+          "steps": [
+            {"step": "3-1", "name": "level_start", "description": "Start executor level"},
+            {"step": "3-2", "name": "execute", "description": "Executor implements tasks"},
+            {"step": "3-2b", "name": "execute_retry", "description": "Retry failed executor"},
+            {"step": "3-3", "name": "code_review", "description": "Code reviewer checks implementation"},
+            {"step": "3-4", "name": "commit", "description": "Commit level results"},
+            {"step": "3-5", "name": "level_complete", "description": "Mark level complete"},
+            {"step": "3-6", "name": "next_level", "description": "Advance to next level"},
+            {"step": "3-7", "name": "phase_complete", "description": "All levels complete"}
+          ],
+          "required_artifacts": ["task-spec.md", "architecture.md"],
+          "user_wait_steps": []
+        },
+        {
+          "phase": 4,
+          "name": "Verify",
+          "steps": [
+            {"step": "4-1", "name": "spec_review", "description": "Spec compliance review"},
+            {"step": "4-2", "name": "analyze", "description": "File-by-file analysis"},
+            {"step": "4-3", "name": "collect_analysis", "description": "Collect analyzer reports"},
+            {"step": "4-3a", "name": "security_review", "description": "Security review"},
+            {"step": "4-4", "name": "quality_review", "description": "Quality/best-practices review"},
+            {"step": "4-5", "name": "fix_loop", "description": "Fix issues found in review"},
+            {"step": "4-6", "name": "knowledge_write", "description": "Write knowledge base entries"},
+            {"step": "4-7", "name": "final_commit", "description": "Final commit and done"}
+          ],
+          "required_artifacts": ["task-spec.md", "architecture.md"],
+          "user_wait_steps": []
+        }
+      ]
+    },
+    "deeptk": {
+      "phases": [
+        {
+          "phase": 1,
+          "name": "Discover",
+          "steps": [
+            {"step": "1-1", "name": "team_setup", "description": "Create interview team and classify task"},
+            {"step": "1-2", "name": "haiku_collect", "description": "Haiku context collectors gather codebase info"},
+            {"step": "1-2a", "name": "interview_generate", "description": "Interviewer generates questions"},
+            {"step": "1-2b", "name": "interview_present", "description": "Present questions to user"},
+            {"step": "1-2c", "name": "interview_wait", "description": "Wait for user interview answers"},
+            {"step": "1-3", "name": "analyze_answers", "description": "Analyst processes answers and evaluates confidence"},
+            {"step": "1-4", "name": "write_spec", "description": "Write task-spec.md from analysis"},
+            {"step": "1-5", "name": "research_validate", "description": "Researcher validates spec against codebase"},
+            {"step": "1-6", "name": "review", "description": "Reviewer checks spec quality"},
+            {"step": "1-6a", "name": "review_fix", "description": "Fix spec issues from reviewer"},
+            {"step": "1-6b", "name": "review_pass", "description": "Reviewer confirms spec pass"}
+          ],
+          "required_artifacts": [],
+          "user_wait_steps": ["1-2", "1-2c", "1-3"]
+        },
+        {
+          "phase": 2,
+          "name": "Design",
+          "steps": [
+            {"step": "2-1", "name": "architect_design", "description": "Architect designs architecture.md"},
+            {"step": "2-2", "name": "designer_variants", "description": "Designer produces design variants"},
+            {"step": "2-3", "name": "research_validate", "description": "Researcher validates architecture"},
+            {"step": "2-4", "name": "review", "description": "Reviewer checks architecture quality"},
+            {"step": "2-5", "name": "review_pass", "description": "Architecture approved"}
+          ],
+          "required_artifacts": ["task-spec.md"],
+          "user_wait_steps": []
+        },
+        {
+          "phase": 3,
+          "name": "Build",
+          "steps": [
+            {"step": "3-1", "name": "level_start", "description": "Start executor level"},
+            {"step": "3-2", "name": "execute", "description": "Executor implements tasks"},
+            {"step": "3-3", "name": "code_review", "description": "Code reviewer checks implementation"},
+            {"step": "3-4", "name": "commit", "description": "Commit level results"},
+            {"step": "3-5", "name": "phase_complete", "description": "All levels complete"}
+          ],
+          "required_artifacts": ["task-spec.md", "architecture.md"],
+          "user_wait_steps": []
+        },
+        {
+          "phase": 4,
+          "name": "Validate",
+          "steps": [
+            {"step": "4-1", "name": "contract_validate", "description": "Contract validator checks interfaces"},
+            {"step": "4-1b", "name": "contract_fix", "description": "Fix contract violations"},
+            {"step": "4-2", "name": "spec_review", "description": "Spec compliance review"},
+            {"step": "4-3", "name": "analyze", "description": "File-by-file analysis"},
+            {"step": "4-3a", "name": "security_review", "description": "Security review"},
+            {"step": "4-3b", "name": "quality_review", "description": "Quality/best-practices review"},
+            {"step": "4-4", "name": "fix_loop", "description": "Fix issues found in review"},
+            {"step": "4-5", "name": "knowledge_write", "description": "Write knowledge base entries"},
+            {"step": "4-6", "name": "final_commit", "description": "Final commit"},
+            {"step": "4-7", "name": "done", "description": "Pipeline complete"}
+          ],
+          "required_artifacts": ["task-spec.md", "architecture.md"],
+          "user_wait_steps": []
+        }
+      ]
+    },
+    "surface": {
+      "phases": [
+        {
+          "phase": 1,
+          "name": "Analyze",
+          "steps": [
+            {"step": "analyze", "name": "analyze", "description": "Analyze task scope"}
+          ],
+          "required_artifacts": [],
+          "user_wait_steps": []
+        },
+        {
+          "phase": 2,
+          "name": "Plan",
+          "steps": [
+            {"step": "plan", "name": "plan", "description": "Plan implementation"}
+          ],
+          "required_artifacts": [],
+          "user_wait_steps": []
+        },
+        {
+          "phase": 3,
+          "name": "Implement",
+          "steps": [
+            {"step": "implement", "name": "implement", "description": "Implement changes"}
+          ],
+          "required_artifacts": [],
+          "user_wait_steps": []
+        },
+        {
+          "phase": 4,
+          "name": "Verify",
+          "steps": [
+            {"step": "verify", "name": "verify", "description": "Verify implementation"}
+          ],
+          "required_artifacts": [],
+          "user_wait_steps": []
+        }
+      ]
+    }
+  }
+}

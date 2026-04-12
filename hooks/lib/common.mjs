@@ -149,6 +149,30 @@ export function checkPipelineLock(cwd) {
   return null;
 }
 
+// --- Phase Advance Detection ---
+
+/**
+ * Returns true if newState represents a phase advancement over oldState.
+ * Used by artifact-validator to skip full checks on non-phase-advancing writes.
+ */
+export function isPhaseAdvance(oldState, newState) {
+  try {
+    const oldPhase = typeof oldState?.phase === 'number' ? oldState.phase : 0;
+    const newPhase = typeof newState?.phase === 'number' ? newState.phase : 0;
+    return newPhase > oldPhase;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Returns true if the pipeline is in a user-wait state (e.g. waiting for interview answers).
+ * Used by persistent-mode to decide whether session stop is allowed.
+ */
+export function isUserWaitStep(state) {
+  return state?.waiting_for_user === true;
+}
+
 // --- Phase Guard Evaluation ---
 
 export function evaluatePhaseGuard(state, { filePath, command, cwd }) {

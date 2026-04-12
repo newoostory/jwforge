@@ -56,9 +56,11 @@ async function main() {
       return;
     }
 
-    // Steps 1-2 and 1-3: waiting for user interview input — let session end cleanly.
-    // The user's next message will be processed as interview answers automatically.
-    if (state.step === '1-2' || state.step === '1-3') {
+    // If the pipeline is explicitly waiting for user input (e.g. interview answers),
+    // allow session to end cleanly. The waiting_for_user flag is set by the pipeline
+    // skill before presenting questions and cleared after receiving answers.
+    // Falls back to step matching for backward compatibility with older state files.
+    if (state.waiting_for_user === true || state.step === '1-2' || state.step === '1-3') {
       console.log(ALLOW);
       return;
     }

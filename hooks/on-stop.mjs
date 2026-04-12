@@ -104,8 +104,11 @@ async function main() {
     // 1. Archive before any cleanup (captures current state)
     archivePipeline(cwd, state);
 
+    // Remember original status before mutation
+    const wasInProgress = state.status === 'in_progress';
+
     // 2. Update state to stopped (only if still in progress)
-    if (state.status === 'in_progress') {
+    if (wasInProgress) {
       state.status = 'stopped';
       state.stopped_at = new Date().toISOString();
       state.stop_reason = 'session_end';
@@ -115,23 +118,31 @@ async function main() {
       );
     }
 
-    // 3. Remove pipeline lock
-    const lockPath = join(cwd, JWFORGE_DIR, 'current', 'pipeline-required.json');
-    if (existsSync(lockPath)) unlinkSync(lockPath);
+    // 3. Remove pipeline lock — but ONLY if the pipeline was NOT actively running.
+    // When in_progress, we preserve the lock so the pipeline can resume cleanly.
+    if (!wasInProgress) {
+      const lockPath = join(cwd, JWFORGE_DIR, 'current', 'pipeline-required.json');
+      if (existsSync(lockPath)) unlinkSync(lockPath);
+    }
 
-    // 3. Remove transient files from current/
+    // 4. Remove transient files from current/
     for (const f of TRANSIENT_FILES) {
       const p = join(cwd, JWFORGE_DIR, 'current', f);
       if (existsSync(p)) unlinkSync(p);
     }
 
-    // 4. Clean up team directory if it exists
-    const homeDir = process.env.HOME || process.env.USERPROFILE;
-    if (state.team_name && homeDir) {
-      const teamDir = join(homeDir, '.claude', 'teams', state.team_name);
-      const taskDir = join(homeDir, '.claude', 'tasks', state.team_name);
-      if (existsSync(teamDir)) rmSync(teamDir, { recursive: true, force: true });
-      if (existsSync(taskDir)) rmSync(taskDir, { recursive: true, force: true });
+    // 5. Clean up team directory — but ONLY if pipeline was NOT in_progress.
+    // When the pipeline is actively running, deleting team dirs causes TeamCreate/
+    // Agent spawn failures on resume. Teams are cleaned up when the pipeline
+    // completes (status = "done") or on next explicit stop after resume.
+    if (!wasInProgress) {
+      const homeDir = process.env.HOME || process.env.USERPROFILE;
+      if (state.team_name && homeDir) {
+        const teamDir = join(homeDir, '.claude', 'teams', state.team_name);
+        const taskDir = join(homeDir, '.claude', 'tasks', state.team_name);
+        if (existsSync(teamDir)) rmSync(teamDir, { recursive: true, force: true });
+        if (existsSync(taskDir)) rmSync(taskDir, { recursive: true, force: true });
+      }
     }
 
     console.log(JSON.stringify({ continue: true }));
