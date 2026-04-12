@@ -40,13 +40,39 @@ export function readStdin() {
   return new Promise((resolve) => {
     const chunks = [];
     let settled = false;
-    const timeout = setTimeout(() => {
-      if (!settled) { settled = true; process.stdin.removeAllListeners(); resolve(Buffer.concat(chunks).toString('utf-8')); }
-    }, 2000);
+
+    // Fast path: stdin already closed before we even start — resolve immediately
+    if (process.stdin.readableEnded) {
+      resolve(Buffer.concat(chunks).toString('utf-8'));
+      return;
+    }
+
+    let slowTimeout;
+    let fastCheck;
+
+    function settle(value) {
+      if (!settled) {
+        settled = true;
+        clearTimeout(fastCheck);
+        clearTimeout(slowTimeout);
+        process.stdin.removeAllListeners();
+        resolve(value);
+      }
+    }
+
     process.stdin.on('data', (chunk) => chunks.push(chunk));
-    process.stdin.on('end', () => { if (!settled) { settled = true; clearTimeout(timeout); resolve(Buffer.concat(chunks).toString('utf-8')); } });
-    process.stdin.on('error', () => { if (!settled) { settled = true; clearTimeout(timeout); resolve(''); } });
-    if (process.stdin.readableEnded) { if (!settled) { settled = true; clearTimeout(timeout); resolve(Buffer.concat(chunks).toString('utf-8')); } }
+    process.stdin.on('end', () => settle(Buffer.concat(chunks).toString('utf-8')));
+    process.stdin.on('error', () => settle(''));
+
+    // Short-circuit check: after 100ms, if stdin ended (data arrived and stream closed), resolve.
+    // Otherwise fall back to the 2000ms total timeout (1900ms remaining after the 100ms check).
+    fastCheck = setTimeout(() => {
+      if (process.stdin.readableEnded) {
+        settle(Buffer.concat(chunks).toString('utf-8'));
+      } else {
+        slowTimeout = setTimeout(() => settle(Buffer.concat(chunks).toString('utf-8')), 1900);
+      }
+    }, 100);
   });
 }
 
