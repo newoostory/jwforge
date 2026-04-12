@@ -91,19 +91,16 @@
 <!-- HIGH-confidence findings that were automatically patched by retro-patcher. -->
 <!-- Only HIGH confidence findings are auto-patched. MEDIUM/LOW appear in Remaining Recommendations below. -->
 
-{{#if patches_applied_count_gt_zero}}
+{{patches_applied_section}}
+
+<!-- patches_applied_section: If patches were applied, fill with a table:
 | # | Target File | Action | Category | Occurrences | Result |
 |---|-------------|--------|----------|-------------|--------|
-{{patches_applied_rows}}
-{{/if}}
-
-<!-- patches_applied_rows format (one row per applied patch):
 | {N} | {target file path} | {modify_setting|improve_prompt|append_pattern|append_review} | {category} | {occurrences} | {applied|skipped: reason} |
--->
 
-{{#if no_patches}}
+If no patches were applied, fill with:
 *No patches applied — no HIGH-confidence findings in this run.*
-{{/if}}
+-->
 
 ### Patch Details
 
@@ -134,27 +131,23 @@
 <!-- MEDIUM and LOW confidence findings that were NOT auto-patched. -->
 <!-- These require manual review and decision before applying. -->
 
-{{#if remaining_count_gt_zero}}
+{{remaining_recommendations_section}}
+
+<!-- remaining_recommendations_section: If MEDIUM or LOW findings exist, fill with:
+
 ### MEDIUM Confidence
-
-<!-- Medium-confidence findings: likely pattern, but ambiguous fix. Review before acting. -->
-
 | Archive | Category | Pattern | Root Cause | Recommended Action | Target |
 |---------|----------|---------|------------|--------------------|--------|
-{{medium_findings_rows}}
+{rows for each MEDIUM finding}
 
 ### LOW Confidence
-
-<!-- Low-confidence findings: speculative. May not be actionable. Listed for awareness only. -->
-
 | Archive | Category | Pattern | Root Cause | Target |
 |---------|----------|---------|------------|--------|
-{{low_findings_rows}}
-{{/if}}
+{rows for each LOW finding}
 
-{{#if no_remaining}}
+If no MEDIUM/LOW findings, fill with:
 *No remaining recommendations — all findings were HIGH confidence and auto-patched, or no findings were produced.*
-{{/if}}
+-->
 
 ---
 
@@ -200,6 +193,16 @@
 
 <!-- Note: phase4_stopped = archives that reached phase 4 but verify did not complete (status != done) -->
 <!-- Most common failure phase: {{most_common_failure_phase}} -->
+
+### Dual-Dir Sync
+
+<!-- Files synced between .claude/jwforge/agents/ and jwforge/agents/ after patching -->
+
+{{sync_results}}
+
+<!-- sync_results: If files were synced, list them. If none, fill with:
+*Agent files already in sync — no changes needed.*
+-->
 
 ---
 

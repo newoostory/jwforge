@@ -140,7 +140,16 @@ The original 6 are: `import_error`, `type_mismatch`, `missing_export`, `security
 ## Constraints
 
 - **Read before write.** Never modify a file you have not read in this session.
-- **Write path restriction.** ONLY write to `.claude/jwforge/` paths. Never write to `jwforge/` project paths — retro.md handles dual-dir sync after you complete.
+- **Write path restriction.** You may ONLY write to files at these exact paths (provided in the Patch Instructions header):
+  - `settings_path` (settings.json in `.claude/jwforge/config/`)
+  - `agents_dir/{name}.md` (agent prompts in `.claude/jwforge/agents/`)
+  - `knowledge_jsonl` (issue-patterns.jsonl — this is in `jwforge/.jwforge/knowledge/`, which is the allowed exception)
+  - `knowledge_review` (review-additions.md — also in `jwforge/.jwforge/knowledge/`)
+  - Never write to any path not listed above. retro.md handles all other syncing.
+- **Path traversal validation.** Before processing any patch, validate the `target` field:
+  - REJECT any target containing `../`, `..\\`, or starting with `/` (absolute path).
+  - For `improve_prompt` actions: the agent name portion of `agents/{name}.md` must match `^[a-z0-9-]+$` (lowercase alphanumeric and hyphens only). REJECT names containing `/`, `\`, `.`, spaces, or any other characters.
+  - If validation fails, skip the patch and report as `skipped (invalid target path)`.
 - **Append only** for `knowledge_jsonl` and `knowledge_review`. Never rewrite or truncate existing content.
 - **Preserve structure** for `agents/*.md`. Add or strengthen content only. Never remove existing constraints, instructions, or sections.
 - **Conservative settings edits.** Only update values or add new keys. Never remove or rename keys in `settings.json`.
