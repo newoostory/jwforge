@@ -20,6 +20,11 @@
             "type": "command",
             "command": "node \"{{INSTALL_DIR}}\"/hooks/phase-guard.mjs",
             "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "node \"{{INSTALL_DIR}}\"/hooks/tdd-guard.mjs",
+            "timeout": 5
           }
         ]
       },
@@ -33,7 +38,17 @@
           },
           {
             "type": "command",
+            "command": "node \"{{INSTALL_DIR}}\"/hooks/tdd-guard.mjs",
+            "timeout": 5
+          },
+          {
+            "type": "command",
             "command": "node \"{{INSTALL_DIR}}\"/hooks/state-validator.mjs",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "node \"{{INSTALL_DIR}}\"/hooks/artifact-validator.mjs",
             "timeout": 5
           }
         ]
@@ -54,13 +69,45 @@
         ]
       }
     ],
+    "PostToolUse": [
+      {
+        "matcher": "Agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"{{INSTALL_DIR}}\"/hooks/subagent-tracker.mjs",
+            "timeout": 3
+          }
+        ]
+      },
+      {
+        "matcher": "Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"{{INSTALL_DIR}}\"/hooks/notify.mjs",
+            "timeout": 3
+          }
+        ]
+      },
+      {
+        "matcher": "Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"{{INSTALL_DIR}}\"/hooks/notify.mjs",
+            "timeout": 3
+          }
+        ]
+      }
+    ],
     "PreCompact": [
       {
         "matcher": "*",
         "hooks": [
           {
             "type": "command",
-            "command": "node \"{{INSTALL_DIR}}\"/hooks/lifecycle.mjs compact",
+            "command": "node \"{{INSTALL_DIR}}\"/hooks/pre-compact.mjs",
             "timeout": 5
           }
         ]
@@ -72,8 +119,18 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"{{INSTALL_DIR}}\"/hooks/lifecycle.mjs stop",
-            "timeout": 5
+            "command": "node \"{{INSTALL_DIR}}\"/hooks/persistent-mode.mjs",
+            "timeout": 3
+          },
+          {
+            "type": "command",
+            "command": "node \"{{INSTALL_DIR}}\"/hooks/on-stop.mjs",
+            "timeout": 3
+          },
+          {
+            "type": "command",
+            "command": "node \"{{INSTALL_DIR}}\"/hooks/notify.mjs",
+            "timeout": 3
           }
         ]
       }

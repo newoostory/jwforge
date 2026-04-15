@@ -29,7 +29,8 @@ async function main() {
     const logFile = join(logDir, 'agent-log.jsonl');
 
     // Only track if pipeline is active
-    if (!readState(cwd)) {
+    const state = readState(cwd);
+    if (!state) {
       console.log(ALLOW);
       return;
     }
@@ -70,9 +71,26 @@ async function main() {
       status: data.status || 'completed',
       duration_ms: data.duration_ms || null,
       tool: data.tool_name || 'Agent',
+      team_mode: state?.team_mode || 'unknown',
     };
 
     appendFileSync(logFile, JSON.stringify(entry) + '\n');
+
+    // Also detect team-related events in the data
+    const toolName = data.tool_name || '';
+    if (['TeamCreate', 'TeamDelete', 'SendMessage'].includes(toolName)) {
+      const teamEntry = {
+        timestamp: new Date().toISOString(),
+        agent_name: 'team-event',
+        model: 'system',
+        description: `${toolName}: ${JSON.stringify(data.tool_input || {}).substring(0, 200)}`,
+        status: data.status || 'completed',
+        duration_ms: data.duration_ms || null,
+        tool: toolName,
+        team_mode: state?.team_mode || 'unknown'
+      };
+      appendFileSync(logFile, JSON.stringify(teamEntry) + '\n');
+    }
 
     console.log(ALLOW);
   } catch (e) {

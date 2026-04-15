@@ -13,22 +13,16 @@
  *   /forge       → full pipeline (Discover -> Design -> Build -> Verify)
  *   /fix         → fix-only mode (Phase 4 steps only)
  *   cancel words → remove lock file
- *   tdd/test first → inject TDD mode message
  *
  * Word-boundary matching prevents false positives (/forger should NOT match /forge).
  */
 
 import { writeFileSync, readFileSync, existsSync, mkdirSync, unlinkSync } from 'fs';
 import { join } from 'path';
-import { readStdin, getCwd, ALLOW, ALLOW_MSG, isLockStale, logHookError } from './lib/core.mjs';
+import { readStdin, getCwd, ALLOW, ALLOW_MSG, isLockStale, logHookError } from './lib/common.mjs';
 
 // --- Cancel keyword patterns (checked first, highest priority) ---
 const CANCEL_PATTERNS = ['취소', 'cancel', 'stop forge', 'abort'];
-
-// --- TDD mode injection message ---
-const TDD_MESSAGE = `<jwforge-tdd-mode>
-[TDD MODE] Write or update tests first, confirm they fail for the right reason, then implement the fix.
-</jwforge-tdd-mode>`;
 
 /**
  * Test whether the message contains a word-boundary-matched trigger.
@@ -49,14 +43,6 @@ function hasTrigger(message, trigger) {
 function hasCancel(message) {
   const lower = message.toLowerCase();
   return CANCEL_PATTERNS.some(p => lower.includes(p.toLowerCase()));
-}
-
-/**
- * Test whether the message contains TDD-related keywords.
- */
-function hasTddKeyword(message) {
-  const lower = message.toLowerCase();
-  return lower.includes('tdd') || lower.includes('test first') || lower.includes('테스트 먼저');
 }
 
 /**
@@ -158,12 +144,6 @@ async function main() {
       console.log(ALLOW_MSG(
         '[JWForge] Pipeline lock created for /fix (fix mode). Running Phase 4 verification + fix loop only.'
       ));
-      return;
-    }
-
-    // Priority 4: TDD mode keyword injection (no lock)
-    if (hasTddKeyword(userMessage)) {
-      console.log(ALLOW_MSG(TDD_MESSAGE));
       return;
     }
 

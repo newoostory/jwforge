@@ -13,7 +13,7 @@
  *   4. Sensitive files (.env, credentials, .pem, etc.) → BLOCK
  *   5. Pipeline lock exists but no state.json → BLOCK file writes
  *   6. No active pipeline (no state or status != in_progress) → ALLOW
- *   7. evaluatePhaseGuard() from core.mjs → enforce phase-based access control
+ *   7. evaluatePhaseGuard() from common.mjs → enforce phase-based access control
  *
  * Fail open: any internal error → ALLOW (hooks must never block the user on hook failure).
  */
@@ -30,7 +30,7 @@ import {
   BLOCK,
   ALLOW_MSG,
   logHookError,
-} from './lib/core.mjs';
+} from './lib/common.mjs';
 
 // ---------------------------------------------------------------------------
 // Sensitive file patterns — always blocked regardless of phase

@@ -7,13 +7,13 @@
  * (a) No phase skipping (max +1 advance)
  * (b) No phase regression
  * (c) Artifact prerequisites (Phase 1→2 requires task-spec.md, Phase 2→3 requires architecture.md unless S complexity)
- * (d) Legal status transitions (in_progress → done/stopped/error, stopped → in_progress, done is terminal)
+ * (d) Legal status transitions (in_progress → done/stopped/in_progress, stopped → in_progress, done is terminal)
  * (e) Complexity immutability after Phase 1
  * (f) Phase sub-status must be "done" before advancing
  * (g) Step whitelist validation against pipeline.json config
  *
  * Only triggers when writing to state.json. Other files pass through.
- * Import from './lib/core.mjs'.
+ * Import from './lib/common.mjs'.
  */
 
 import { existsSync, readFileSync } from 'fs';
@@ -26,14 +26,14 @@ import {
   BLOCK,
   JWFORGE_DIR,
   logHookError,
-} from './lib/core.mjs';
+} from './lib/common.mjs';
 
 // --- Step Whitelist ---
 
 const HARDCODED_VALID_STEPS = [
-  '1-1', '1-2', '1-3', '1-4', '1-5',
-  '2-1', '2-2',
-  '3-1', '3-2', '3-3', '3-4',
+  '1-1', '1-2', '1-3',
+  '2-1', '2-2', '2-3',
+  '3-0', '3-N',
   '4-1', '4-2', '4-3', '4-4',
 ];
 
@@ -54,10 +54,9 @@ function loadValidSteps(cwd) {
 // --- Legal Status Transitions ---
 
 const LEGAL_STATUS_TRANSITIONS = {
-  'in_progress': ['done', 'stopped', 'error', 'in_progress'],
+  'in_progress': ['done', 'stopped', 'in_progress'],
   'stopped': ['in_progress'],
   'done': [],          // terminal — no transitions out
-  'error': ['in_progress'],
 };
 
 // --- Main ---
@@ -194,7 +193,7 @@ async function main() {
 
     // === RULE (f): Phase sub-status must be "done" before advancing ===
     if (newPhase > oldPhase) {
-      const phaseStatus = currentState.phase_status;
+      const phaseStatus = currentState[`phase${oldPhase}`]?.status;
       if (phaseStatus && phaseStatus !== 'done' && phaseStatus !== 'skipped') {
         console.log(BLOCK(`[JWForge State Validator] BLOCKED: Phase ${oldPhase} status is "${phaseStatus}", not "done". Complete the current phase before advancing.`));
         return;

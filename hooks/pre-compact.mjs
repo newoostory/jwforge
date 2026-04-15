@@ -35,7 +35,7 @@ async function main() {
     }
 
     // Build compact snapshot
-    const pipeline = state.pipeline || 'deep';
+    const pipeline = state.pipeline || 'forge';
     const lines = [
       '# JWForge Context Snapshot',
       `> Auto-saved at ${new Date().toISOString()} before context compaction`,
@@ -53,22 +53,19 @@ async function main() {
     if (state.team_name) {
       lines.push(`- Team: ${state.team_name}`);
     }
+    lines.push(`- Team mode: ${state.team_mode || 'subagent_only'}`);
 
     // Add phase-specific info
-    if (state.phase3 && state.phase3.completed_levels) {
-      lines.push(`- Completed levels: ${JSON.stringify(state.phase3.completed_levels)}`);
-      lines.push(`- Current level: ${state.phase3.current_level || 0}`);
+    if (state.phase3) {
+      lines.push(`- Current unit: ${state.phase3.current_unit || 0}`);
+      lines.push(`- Total units: ${state.phase3.total_units || 0}`);
+      lines.push(`- Completed units: ${JSON.stringify(state.phase3.completed_units || [])}`);
+      lines.push(`- Test written: ${state.phase3.current_unit_test_written || false}`);
     }
 
     if (state.phase4) {
       lines.push(`- Fix loop count: ${state.phase4.fix_loop_count || 0}`);
       lines.push(`- Review count: ${state.phase4.review_count || 0}`);
-    }
-
-    // Add deeptk-specific state info
-    if (state.pipeline === 'deeptk' && state.phase1 && state.phase1.interview_round) {
-      lines.push(`- Interview rounds: ${state.phase1.interview_round}`);
-      lines.push(`- Researcher validated: ${state.phase1.researcher_validated || false}`);
     }
 
     // Check for key artifacts
@@ -82,9 +79,6 @@ async function main() {
     lines.push('', '## Resume Instructions');
     lines.push('Read .jwforge/current/state.json and resume from the current phase/step.');
     lines.push('Key files: task-spec.md (requirements), architecture.md (design), agent-log.jsonl (history).');
-    if (state.pipeline === 'deeptk') {
-      lines.push('deeptk: interview-log.md (Q&A history for Phase 1 resume).');
-    }
     const snapshotFile = join(stateDir, 'compact-snapshot.md');
     writeFileSync(snapshotFile, lines.join('\n'));
 

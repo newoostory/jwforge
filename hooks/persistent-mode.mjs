@@ -59,23 +59,17 @@ async function main() {
     // If the pipeline is explicitly waiting for user input (e.g. interview answers),
     // allow session to end cleanly. The waiting_for_user flag is set by the pipeline
     // skill before presenting questions and cleared after receiving answers.
-    // Falls back to step matching for backward compatibility with older state files.
-    if (state.waiting_for_user === true || state.step === '1-2' || state.step === '1-3') {
+    if (state.waiting_for_user === true) {
       console.log(ALLOW);
       return;
     }
 
     // Pipeline is in progress but LLM stopped — inject continuation
-    const phaseNames = state.pipeline === 'deeptk' ? {
+    const phaseNames = {
       1: 'Discover',
       2: 'Design',
       3: 'Build',
       4: 'Validate'
-    } : {
-      1: 'Deep Interview',
-      2: 'Architecture',
-      3: 'Execute',
-      4: 'Verify'
     };
     const phaseName = phaseNames[state.phase] || `Phase ${state.phase}`;
 

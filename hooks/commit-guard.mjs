@@ -10,7 +10,7 @@
  * 4. Blocks dangerous git ops (force push, hard reset, checkout ., clean -f, branch -D)
  *
  * Commit prefix loaded from config/pipeline.json with [forge] as hardcoded fallback.
- * Import from './lib/core.mjs'.
+ * Import from './lib/common.mjs'.
  */
 
 import { existsSync, readFileSync } from 'fs';
@@ -23,7 +23,7 @@ import {
   ALLOW,
   BLOCK,
   logHookError,
-} from './lib/core.mjs';
+} from './lib/common.mjs';
 
 // --- Commit Prefix ---
 

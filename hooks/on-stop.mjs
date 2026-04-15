@@ -25,9 +25,12 @@ const ARTIFACT_FILES = [
   'interview-log.md',
   'agent-log.jsonl',
   'compact-snapshot.md',
-  'verify-evidence.md',
-  'contracts.md',
-  'style-guide.md',
+  'review-phase1.md',
+  'review-phase2.md',
+  'verify-report.md',
+  'test-report.md',
+  'review-phase4.md',
+  'tdd-state.json',
 ];
 
 const TRANSIENT_FILES = ['.notify-cache.json'];
@@ -57,10 +60,7 @@ function archivePipeline(cwd, state) {
   // Determine commit hash range for this pipeline
   let commitRange = 'none';
   try {
-    const prefix =
-      state.pipeline === 'deeptk' ? '[jwforge-deeptk]' :
-      state.pipeline === 'surface' ? '[jwforge-surface]' :
-      '[jwforge]';
+    const prefix = '[forge]';
     const result = execSync(
       `git log --all --oneline --grep="${prefix}" --format="%H" 2>/dev/null`,
       { cwd, encoding: 'utf8', timeout: 5000 },

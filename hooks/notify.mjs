@@ -32,15 +32,15 @@ function sendNotification(title, body) {
   }
 }
 
-const PHASE_NAMES_BY_PIPELINE = {
-  deep:    { 1: 'Deep Interview', 2: 'Architecture', 3: 'Execute',  4: 'Verify'   },
-  deeptk:  { 1: 'Discover',       2: 'Design',       3: 'Build',    4: 'Validate' },
-  surface: { 1: 'Deep Interview', 2: 'Architecture', 3: 'Execute',  4: 'Verify'   },
+const PHASE_NAMES = {
+  1: 'Discover',
+  2: 'Design',
+  3: 'Build',
+  4: 'Validate'
 };
 
-function getPhaseName(pipeline, phase) {
-  const map = PHASE_NAMES_BY_PIPELINE[pipeline] || {};
-  return map[phase] || `Phase ${phase}`;
+function getPhaseName(phase) {
+  return PHASE_NAMES[phase] || `Phase ${phase}`;
 }
 
 const CACHE_FILE_NAME = '.notify-cache.json';
@@ -63,7 +63,7 @@ function writeCachedState(cwd, state) {
   } catch { /* ignore */ }
 }
 
-function detectNotification(oldState, newState, pipeline) {
+function detectNotification(oldState, newState) {
   const step = (newState.step || '').toLowerCase();
   const status = newState.status;
   const phase = newState.phase;
@@ -82,19 +82,19 @@ function detectNotification(oldState, newState, pipeline) {
   // Phase transition: detected by comparing old phase to new phase
   const oldPhase = oldState ? oldState.phase : null;
   if (typeof phase === 'number' && typeof oldPhase === 'number' && phase !== oldPhase) {
-    const phaseName = getPhaseName(pipeline, phase);
+    const phaseName = getPhaseName(phase);
     return { title: `JWForge: Phase ${phase}`, body: `Now in ${phaseName}.` };
   }
 
   // User input waiting: step explicitly signals a question or interview interaction
   if (step.includes('question') || step.includes('interview') || step.includes('waiting')) {
-    const phaseName = getPhaseName(pipeline, newState.phase);
+    const phaseName = getPhaseName(newState.phase);
     return { title: 'JWForge: Input Needed', body: `${phaseName} — awaiting your response.` };
   }
 
   // Phase 1 just started for the first time (no prior state)
   if (phase === 1 && oldState === null) {
-    const phase1Name = getPhaseName(pipeline, 1);
+    const phase1Name = getPhaseName(1);
     return { title: `JWForge: ${phase1Name}`, body: 'Phase 1 started — your input is needed.' };
   }
 
@@ -153,8 +153,7 @@ async function handlePostToolUse(data) {
   // Cache current state for next comparison
   writeCachedState(cwd, state);
 
-  const pipeline = (state.pipeline || '').toLowerCase();
-  const notification = detectNotification(oldState, state, pipeline);
+  const notification = detectNotification(oldState, state);
   if (notification) {
     sendNotification(notification.title, notification.body);
   }
