@@ -3,53 +3,65 @@
 /**
  * JWForge State Validator (PreToolUse hook for Write)
  *
- * Validates that state.json transitions are legal:
- * 1. Phase can only advance by 1 (no skipping), except S complexity can skip Phase 2
- * 2. Phase N+1 requires Phase N's output artifact to exist
- * 3. Status can only go: in_progress → done | stopped (no reversals)
- * 4. Complexity/type cannot change after Phase 1 classification
- * 5. Phase sub-status must be "done" before advancing to next phase
+ * Validates state.json transitions are legal:
+ * (a) No phase skipping (max +1 advance)
+ * (b) No phase regression
+ * (c) Artifact prerequisites (Phase 1→2 requires task-spec.md, Phase 2→3 requires architecture.md unless S complexity)
+ * (d) Legal status transitions (in_progress → done/stopped/error, stopped → in_progress, done is terminal)
+ * (e) Complexity immutability after Phase 1
+ * (f) Phase sub-status must be "done" before advancing
+ * (g) Step whitelist validation against pipeline.json config
  *
  * Only triggers when writing to state.json. Other files pass through.
+ * Import from './lib/core.mjs'.
  */
 
 import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
-import { readStdin, getCwd, readState, ALLOW, ALLOW_MSG, BLOCK, JWFORGE_DIR, logHookError } from './lib/common.mjs';
+import {
+  readStdin,
+  getCwd,
+  readState,
+  ALLOW,
+  ALLOW_MSG,
+  BLOCK,
+  JWFORGE_DIR,
+  logHookError,
+} from './lib/core.mjs';
 
-const HARDCODED_VALID_STEPS = {
-  deep: ['1-1','1-2','1-3','1-3b','1-4','1-5','1-5b','1-6','1-6a','1-6b',
-         '2-1','2-2','2-2b',
-         '3-1','3-2','3-2b','3-3','3-4','3-5','3-6','3-7',
-         '4-1','4-2','4-3','4-3a','4-4','4-5','4-6','4-7'],
-  deeptk: ['1-1','1-2','1-2a','1-2b','1-2c','1-3','1-4','1-5','1-6','1-6a','1-6b',
-           '2-1','2-2','2-3','2-4','2-5',
-           '3-1','3-2','3-3','3-4','3-5',
-           '4-1','4-1b','4-2','4-3','4-3a','4-3b','4-4','4-5','4-6','4-7'],
-  surface: ['analyze','plan','implement','verify']
-};
+// --- Step Whitelist ---
 
-function loadValidSteps() {
+const HARDCODED_VALID_STEPS = [
+  '1-1', '1-2', '1-3', '1-4', '1-5',
+  '2-1', '2-2',
+  '3-1', '3-2', '3-3', '3-4',
+  '4-1', '4-2', '4-3', '4-4',
+];
+
+function loadValidSteps(cwd) {
   try {
-    const configPath = join(getCwd(), 'config', 'phase-config.json');
+    const configPath = join(cwd, 'config', 'pipeline.json');
     if (!existsSync(configPath)) return HARDCODED_VALID_STEPS;
     const config = JSON.parse(readFileSync(configPath, 'utf8'));
-    if (!config?.pipelines || typeof config.pipelines !== 'object') return HARDCODED_VALID_STEPS;
-    const result = {};
-    for (const [pipelineName, pipelineData] of Object.entries(config.pipelines)) {
-      if (Array.isArray(pipelineData?.phases)) {
-        result[pipelineName] = pipelineData.phases.flatMap(p =>
-          Array.isArray(p?.steps) ? p.steps.map(s => s.step).filter(Boolean) : []
-        );
-      }
+    if (Array.isArray(config?.valid_steps) && config.valid_steps.length > 0) {
+      return config.valid_steps;
     }
-    return Object.keys(result).length > 0 ? result : HARDCODED_VALID_STEPS;
+    return HARDCODED_VALID_STEPS;
   } catch {
     return HARDCODED_VALID_STEPS;
   }
 }
 
-const VALID_STEPS = loadValidSteps();
+// --- Legal Status Transitions ---
+
+const LEGAL_STATUS_TRANSITIONS = {
+  'in_progress': ['done', 'stopped', 'error', 'in_progress'],
+  'stopped': ['in_progress'],
+  'done': [],          // terminal — no transitions out
+  'error': ['in_progress'],
+};
+
+// --- Main ---
 
 async function main() {
   try {
@@ -59,10 +71,11 @@ async function main() {
     let data;
     try { data = JSON.parse(raw); } catch { console.log(ALLOW); return; }
 
-    const filePath = data.file_path || data.filePath || data.input?.file_path || '';
+    // Extract file_path from Write tool event
+    const filePath = data.tool_input?.file_path || data.input?.file_path || '';
     if (!filePath) { console.log(ALLOW); return; }
 
-    // Only validate state.json writes — use full path for precision
+    // Only validate state.json writes
     const normalized = filePath.replace(/\\/g, '/');
     if (!normalized.endsWith('state.json') || !normalized.includes('.jwforge/current/')) {
       console.log(ALLOW);
@@ -80,94 +93,99 @@ async function main() {
     }
 
     // Parse the new content being written
-    const newContent = data.content || data.input?.content || '';
+    const newContent = data.tool_input?.content || data.input?.content || data.content || '';
     if (!newContent) { console.log(ALLOW); return; }
 
     let newState;
     try { newState = JSON.parse(newContent); } catch {
-      console.log(BLOCK(`[JWForge State Validator] BLOCKED: Invalid JSON in state.json write. State file must be valid JSON.`));
+      console.log(BLOCK('[JWForge State Validator] BLOCKED: Invalid JSON in state.json write. State file must be valid JSON.'));
       return;
     }
 
-    const oldPhase = currentState.phase || 1;
-    const newPhase = newState.phase || 1;
+    const oldPhase = typeof currentState.phase === 'number' ? currentState.phase : 1;
+    const newPhase = typeof newState.phase === 'number' ? newState.phase : 1;
 
-    // === RULE 1: No phase skipping (max +1 advance) ===
+    // === RULE (a): No phase skipping (max +1 advance) ===
+    // Exception: S complexity can skip Phase 2 (1 → 3)
     if (newPhase > oldPhase + 1) {
-      console.log(BLOCK(`[JWForge State Validator] BLOCKED: Illegal phase skip from Phase ${oldPhase} to Phase ${newPhase}. Phases must advance by 1. Complete Phase ${oldPhase} first.`));
-      return;
+      const complexity = newState.complexity || currentState.complexity;
+      const isSkip = (complexity === 'S' && oldPhase === 1 && newPhase === 3);
+      if (!isSkip) {
+        console.log(BLOCK(`[JWForge State Validator] BLOCKED: Illegal phase skip from Phase ${oldPhase} to Phase ${newPhase}. Phases must advance by at most 1. Complete Phase ${oldPhase} first.`));
+        return;
+      }
     }
 
-    // === RULE 2: No going backwards ===
+    // === RULE (b): No phase regression ===
     if (newPhase < oldPhase && currentState.status === 'in_progress') {
       console.log(BLOCK(`[JWForge State Validator] BLOCKED: Illegal phase regression from Phase ${oldPhase} to Phase ${newPhase}. Phases cannot go backwards during active pipeline.`));
       return;
     }
 
-    // === RULE 3: Artifact prerequisite check ===
+    // === RULE (c): Artifact prerequisites on phase advance ===
     if (newPhase > oldPhase) {
       // Phase 1 → 2: task-spec.md must exist
       if (oldPhase === 1 && newPhase === 2) {
         const taskSpec = join(stateDir, 'task-spec.md');
         if (!existsSync(taskSpec)) {
-          console.log(BLOCK(`[JWForge State Validator] BLOCKED: Cannot advance to Phase 2 without task-spec.md. Complete Phase 1 (Deep Interview) first.`));
+          console.log(BLOCK('[JWForge State Validator] BLOCKED: Cannot advance to Phase 2 without task-spec.md. Complete Phase 1 (Discover) first.'));
           return;
         }
       }
 
       // Phase 2 → 3: architecture.md must exist (unless S complexity)
       if (oldPhase === 2 && newPhase === 3) {
-        const arch = join(stateDir, 'architecture.md');
         const complexity = newState.complexity || currentState.complexity;
-        if (complexity !== 'S' && !existsSync(arch)) {
-          console.log(BLOCK(`[JWForge State Validator] BLOCKED: Cannot advance to Phase 3 without architecture.md (complexity: ${complexity}). Complete Phase 2 (Architecture) first.`));
-          return;
+        if (complexity !== 'S') {
+          const arch = join(stateDir, 'architecture.md');
+          if (!existsSync(arch)) {
+            console.log(BLOCK(`[JWForge State Validator] BLOCKED: Cannot advance to Phase 3 without architecture.md (complexity: ${complexity}). Complete Phase 2 (Design) first.`));
+            return;
+          }
         }
       }
 
-      // S complexity Phase 1 → 3 shortcut (skip Phase 2): task-spec.md must exist
+      // S complexity Phase 1 → 3 shortcut: task-spec.md must still exist
       if (oldPhase === 1 && newPhase === 3) {
         const complexity = newState.complexity || currentState.complexity;
         if (complexity !== 'S') {
-          console.log(BLOCK(`[JWForge State Validator] BLOCKED: Only S complexity can skip Phase 2. Current complexity: ${complexity}. Go through Phase 2 (Architecture) first.`));
+          console.log(BLOCK(`[JWForge State Validator] BLOCKED: Only S complexity can skip Phase 2. Current complexity: ${complexity}. Go through Phase 2 (Design) first.`));
           return;
         }
         const taskSpec = join(stateDir, 'task-spec.md');
         if (!existsSync(taskSpec)) {
-          console.log(BLOCK(`[JWForge State Validator] BLOCKED: Cannot advance to Phase 3 without task-spec.md, even for S complexity.`));
+          console.log(BLOCK('[JWForge State Validator] BLOCKED: Cannot advance to Phase 3 without task-spec.md, even for S complexity.'));
+          return;
+        }
+      }
+
+      // Phase 3 → 4: architecture.md must exist (it was required to enter Phase 3 for non-S)
+      if (oldPhase === 3 && newPhase === 4) {
+        const taskSpec = join(stateDir, 'task-spec.md');
+        if (!existsSync(taskSpec)) {
+          console.log(BLOCK('[JWForge State Validator] BLOCKED: Cannot advance to Phase 4 without task-spec.md.'));
           return;
         }
       }
     }
 
-    // === RULE 4: Status transitions ===
+    // === RULE (d): Legal status transitions ===
     const oldStatus = currentState.status;
     const newStatus = newState.status;
     if (oldStatus && newStatus) {
-      const legalTransitions = {
-        'in_progress': ['done', 'stopped', 'error', 'in_progress'],
-        'done': ['done'],           // done is terminal
-        'stopped': ['in_progress'], // can resume from stopped
-        'error': ['in_progress'],   // can retry from error
-      };
-      const allowed = legalTransitions[oldStatus] || [];
-      if (!allowed.includes(newStatus)) {
+      const allowed = LEGAL_STATUS_TRANSITIONS[oldStatus];
+      if (allowed && !allowed.includes(newStatus)) {
         console.log(BLOCK(`[JWForge State Validator] BLOCKED: Illegal status transition from "${oldStatus}" to "${newStatus}". Pipeline status "${oldStatus}" cannot transition to "${newStatus}".`));
         return;
       }
-    }
-
-    // === RULE 5a: deeptk does not support S complexity — block advancement beyond Phase 1 ===
-    if (newPhase > 1) {
-      const pipeline = newState.pipeline || currentState.pipeline;
-      const complexity = newState.complexity || currentState.complexity;
-      if (pipeline === 'deeptk' && complexity === 'S') {
-        console.log(BLOCK(`[JWForge State Validator] BLOCKED: deeptk pipeline does not support S complexity. S tasks must use /deep instead. Cannot advance beyond Phase 1 with S complexity in deeptk.`));
+      // Block transition OUT of "done" — it's terminal
+      if (oldStatus === 'done' && newStatus !== 'done') {
+        console.log(BLOCK(`[JWForge State Validator] BLOCKED: Pipeline status "done" is terminal. Cannot transition to "${newStatus}". Start a new pipeline instead.`));
         return;
       }
     }
 
-    // === RULE 5: Complexity/type immutability after classification ===
+    // === RULE (e): Complexity immutability after Phase 1 ===
     if (currentState.complexity && newState.complexity && currentState.complexity !== newState.complexity) {
       if (oldPhase >= 2) {
         console.log(BLOCK(`[JWForge State Validator] BLOCKED: Cannot change complexity from "${currentState.complexity}" to "${newState.complexity}" after Phase 1. Complexity is locked after classification.`));
@@ -175,7 +193,7 @@ async function main() {
       }
     }
 
-    // === RULE 6: Phase sub-status must be done before advancing ===
+    // === RULE (f): Phase sub-status must be "done" before advancing ===
     if (newPhase > oldPhase) {
       const phaseKey = `phase${oldPhase}`;
       const phaseStatus = currentState[phaseKey]?.status;
@@ -185,61 +203,17 @@ async function main() {
       }
     }
 
-    // === RULE 7: Step whitelist validation ===
+    // === RULE (g): Step whitelist validation ===
     const newStep = newState.step;
     if (newStep && typeof newStep === 'string') {
-      const pipeline = newState.pipeline || currentState.pipeline;
-      const allowedSteps = VALID_STEPS[pipeline];
-      if (allowedSteps && !allowedSteps.includes(newStep)) {
-        console.log(BLOCK(`[JWForge State Validator] BLOCKED: Unrecognized step "${newStep}" for pipeline "${pipeline}". Valid steps: ${allowedSteps.join(', ')}.`));
+      const validSteps = loadValidSteps(cwd);
+      if (!validSteps.includes(newStep)) {
+        console.log(BLOCK(`[JWForge State Validator] BLOCKED: Unrecognized step "${newStep}" for forge pipeline. Valid steps: ${validSteps.join(', ')}.`));
         return;
       }
     }
 
-    // === RULE 8: Sub-step completion checks before phase advancement ===
-    if (newPhase > oldPhase) {
-      const pipeline = newState.pipeline || currentState.pipeline;
-
-      // Phase 1 → 2 for deeptk: require researcher + reviewer completion
-      if (oldPhase === 1 && newPhase === 2 && pipeline === 'deeptk') {
-        if (!currentState.phase1?.researcher_validated) {
-          console.log(BLOCK(`[JWForge State Validator] BLOCKED: Cannot advance to Phase 2 — researcher has not validated Phase 1 output (phase1.researcher_validated is not true).`));
-          return;
-        }
-        if (!currentState.phase1?.reviewer_passed) {
-          console.log(BLOCK(`[JWForge State Validator] BLOCKED: Cannot advance to Phase 2 — reviewer has not passed Phase 1 output (phase1.reviewer_passed is not true).`));
-          return;
-        }
-      }
-
-      // Phase 3 → 4: require at least one completed executor level
-      if (oldPhase === 3 && newPhase === 4) {
-        const completedLevels = currentState.phase3?.completed_levels;
-        if (!Array.isArray(completedLevels) || completedLevels.length === 0) {
-          console.log(BLOCK(`[JWForge State Validator] BLOCKED: Cannot advance to Phase 4 — no executor levels completed (phase3.completed_levels is empty).`));
-          return;
-        }
-      }
-    }
-
-    // === RULE 9: Resume gap check — warn if phase3.completed_levels has gaps ===
-    if (oldStatus === 'stopped' && newStatus === 'in_progress') {
-      const completedLevels = currentState.phase3?.completed_levels;
-      if (Array.isArray(completedLevels) && completedLevels.length > 1) {
-        const sorted = [...completedLevels].sort((a, b) => a - b);
-        const gaps = [];
-        for (let i = 1; i < sorted.length; i++) {
-          if (sorted[i] !== sorted[i - 1] + 1) {
-            gaps.push(`${sorted[i - 1] + 1}..${sorted[i] - 1}`);
-          }
-        }
-        if (gaps.length > 0) {
-          console.log(ALLOW_MSG(`[JWForge State Validator] WARNING: Resuming pipeline but phase3.completed_levels has gaps (${JSON.stringify(sorted)}). Missing levels: ${gaps.join(', ')}. Verify this is intentional before proceeding.`));
-          return;
-        }
-      }
-    }
-
+    // All checks passed
     console.log(ALLOW);
   } catch (e) {
     // Validator failure should not block — fail open
