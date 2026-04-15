@@ -83,7 +83,6 @@ OLD_HOOKS=(
   "block-plan-mode.mjs"
   "keyword-detector.mjs"
   "git-commit-guard.mjs"
-  "agent-bg-guard.mjs"
   "lifecycle.mjs"
 )
 # Note: hooks that exist in BOTH old and new systems (notify.mjs, subagent-tracker.mjs, etc.)

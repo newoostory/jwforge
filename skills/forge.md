@@ -54,7 +54,7 @@ All thinking is done by agents. You only route, relay, and gate.
   - `researcher-hooks`: analyze hooks/ directory
   - `researcher-agents`: analyze agents/ directory
   - `researcher-skills`: analyze skills/ and config/ directories
-  - `researcher-api`: analyze Claude Code API capabilities
+  - `researcher-api`: analyze external API calls, SDK usage, authentication patterns
 - Each writes `analysis-{role}.md`
 - Wait for ALL to complete
 

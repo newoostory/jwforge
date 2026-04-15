@@ -67,6 +67,16 @@
             "timeout": 3
           }
         ]
+      },
+      {
+        "matcher": "Agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"{{INSTALL_DIR}}\"/hooks/agent-bg-guard.mjs",
+            "timeout": 3
+          }
+        ]
       }
     ],
     "PostToolUse": [
