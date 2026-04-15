@@ -43,7 +43,7 @@ async function main() {
     // PostToolUse receives: { tool_name, tool_use_id, input, output }
     // input: { prompt, model, name, description, ... } — the Agent tool's input parameters
     // output: { content, type } — the Agent's response text
-    const input = data.input || {};
+    const input = data.tool_input || data.input || {};
     const output = data.output || {};
 
     // Extract agent name: prefer input.name, fallback to scanning output for report header
