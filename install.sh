@@ -82,15 +82,12 @@ OLD_HOOKS=(
   "bash-guard.mjs"
   "block-plan-mode.mjs"
   "keyword-detector.mjs"
-  "notify.mjs"
-  "subagent-tracker.mjs"
-  "artifact-validator.mjs"
-  "persistent-mode.mjs"
-  "on-stop.mjs"
-  "pre-compact.mjs"
   "git-commit-guard.mjs"
   "agent-bg-guard.mjs"
+  "lifecycle.mjs"
 )
+# Note: hooks that exist in BOTH old and new systems (notify.mjs, subagent-tracker.mjs, etc.)
+# are NOT in this list — they get overwritten by the copy step above.
 
 for hook in "${OLD_HOOKS[@]}"; do
   target="$INSTALL_DIR/hooks/$hook"
@@ -109,7 +106,33 @@ for skill_dir in "${OLD_SKILL_DIRS[@]}"; do
   fi
 done
 
-OLD_SKILL_FILES=("jwforge.md" "deeptk.md" "retro.md")
+OLD_SKILL_FILES=("jwforge.md" "deeptk.md" "retro.md" "surface.md")
+
+# Old config files
+OLD_CONFIG_FILES=("phase-config.json")
+for config_file in "${OLD_CONFIG_FILES[@]}"; do
+  target="$INSTALL_DIR/config/$config_file"
+  if [ -f "$target" ]; then
+    rm "$target"
+    echo "  [CLEAN] Removed old config: $config_file"
+  fi
+done
+
+# Old hook library
+if [ -f "$INSTALL_DIR/hooks/lib/core.mjs" ]; then
+  rm "$INSTALL_DIR/hooks/lib/core.mjs"
+  echo "  [CLEAN] Removed old hook lib: core.mjs (merged into common.mjs)"
+fi
+
+# Old template files
+OLD_TEMPLATES=("deeptk-spec.md" "retro-report.md")
+for tmpl in "${OLD_TEMPLATES[@]}"; do
+  target="$INSTALL_DIR/templates/$tmpl"
+  if [ -f "$target" ]; then
+    rm "$target"
+    echo "  [CLEAN] Removed old template: $tmpl"
+  fi
+done
 for skill_file in "${OLD_SKILL_FILES[@]}"; do
   target="$INSTALL_DIR/skills/$skill_file"
   if [ -f "$target" ]; then
@@ -118,7 +141,14 @@ for skill_file in "${OLD_SKILL_FILES[@]}"; do
   fi
 done
 
-NEW_AGENTS=("architect.md" "executor.md" "verifier.md" "fixer.md")
+# Whitelist: agents that belong in the new system
+NEW_AGENTS=(
+  "conductor.md" "interviewer.md" "analyst.md" "researcher.md"
+  "designer.md" "reviewer-phase1.md" "reviewer-phase2.md" "state-recorder.md"
+  "test-writer.md" "executor.md" "code-reviewer.md"
+  "verifier.md" "fixer.md" "tester.md" "reviewer-phase4.md"
+)
+# Remove agents NOT in the whitelist (legacy: architect, analyzer, reviewer, contract-validator, etc.)
 if [ -d "$INSTALL_DIR/agents" ]; then
   for agent_file in "$INSTALL_DIR/agents/"*.md; do
     [ -f "$agent_file" ] || continue
@@ -160,7 +190,7 @@ node -e "
 
   // Set required env vars (preserve existing env)
   if (!settings.env) settings.env = {};
-  settings.env['CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS'] = '0';
+  settings.env['CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS'] = '1';
   settings.env['CLAUDE_CODE_DISABLE_ADAPTIVE_THINKING'] = '1';
 
   // Replace {{INSTALL_DIR}} with actual path and build hooks
