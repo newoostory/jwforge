@@ -10,7 +10,7 @@
       "name": "Discover",
       "description": "Interview + requirements analysis",
       "required_artifacts": [],
-      "user_wait_steps": ["1-3"],
+      "user_wait_steps": [],
       "steps": [
         {"id": "1-1", "name": "interview", "description": "Structured user interview (opus)"},
         {"id": "1-2", "name": "analyze", "description": "Requirements analysis → task-spec.md (opus)"},

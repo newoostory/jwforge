@@ -8,7 +8,7 @@ All thinking is done by agents. You only route, relay, and gate.
 
 | Phase | Name | Agents | User Gate |
 |-------|------|--------|-----------|
-| 1 | Discover | interviewer, analyst, reviewer-phase1 | After review |
+| 1 | Discover | interviewer, analyst, reviewer-phase1 | None (auto-advance) |
 | 2 | Design | researcher (xN parallel), designer, reviewer-phase2 | After review (show unit count for XL) |
 | 3 | Build | test-writer -> executor -> code-reviewer (per unit) | After all units complete |
 | 4 | Validate | verifier, fixer, tester, reviewer-phase4 | None |
@@ -39,12 +39,12 @@ All thinking is done by agents. You only route, relay, and gate.
 - Spawn analyst (opus): reads interview-log.md, produces task-spec.md
 - Output: `.jwforge/current/task-spec.md`
 
-### Step 1-3: Review (User Gate)
+### Step 1-3: Review (Auto-Advance)
 - Spawn reviewer-phase1 (opus): validates task-spec.md against interview-log.md
 - If FAIL: re-spawn interviewer for gap-filling round, then re-analyze, then re-review
-- If PASS: present summary to user, wait for approval
-- Update state-recorder: phase1.status = "done", waiting_for_user = true
-- On user approval: phase = 2, step = "2-1", waiting_for_user = false
+- If PASS: present summary to user (no approval required), auto-advance
+- Update state-recorder: phase1.status = "done", waiting_for_user = false
+- Auto-advance: phase = 2, step = "2-1"
 - S complexity: phase = 3, step = "3-N" (skip Phase 2)
 
 ## Phase 2: Design
