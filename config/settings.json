@@ -1,68 +1,33 @@
 {
   "name": "jwforge",
-  "version": "0.2.0",
-  "description": "Team-based multi-agent orchestration pipeline for Claude Code",
-  "triggers": ["/deep", "/surface", "/deeptk", "/resume", "/retro"],
-  "skill_path": "skills/jwforge.md",
+  "version": "1.0.0",
+  "description": "Multi-agent orchestration pipeline for Claude Code",
+  "triggers": ["/forge", "/fix"],
+  "skill_path": "skills/forge.md",
   "agents_dir": "agents/",
   "templates_dir": "templates/",
   "storage_dir": ".jwforge/",
-  "defaults": {
-    "architect_model": "opus",
-    "designer_model": "opus",
-    "reviewer_model": "opus",
-    "min_executor_model": "sonnet",
-    "analyzer_model": "sonnet",
-    "tester_model": "sonnet",
-    "fixer_model_initial": "sonnet",
-    "fixer_model_upgrade": "opus",
-    "haiku_collector_model": "haiku",
-    "max_parallel_analyzers": 10,
-    "max_retry_count": 3,
-    "max_architect_redesign_retry": 2,
-    "code_reviewer_model": "sonnet",
-    "knowledge_writer_model": "haiku",
-    "max_fix_iterations": 5
+  "models": {
+    "interviewer": "opus",
+    "analyst": "opus",
+    "researcher": "sonnet",
+    "designer": "opus",
+    "reviewer": "opus",
+    "test_writer": "sonnet",
+    "executor": "sonnet",
+    "code_reviewer": "sonnet",
+    "verifier": "opus",
+    "fixer_initial": "sonnet",
+    "fixer_upgrade": "opus",
+    "state_recorder": "haiku"
   },
-  "team": {
-    "members": ["conductor", "architect", "reviewer"],
-    "subagents": ["executor", "analyzer", "tester", "fixer"]
+  "limits": {
+    "max_executor_retries": 3,
+    "max_fix_iterations": 5,
+    "max_analysis_agents": 4
   },
   "git": {
-    "commit_prefix": "[jwforge]",
-    "impl_done_tag": "jwforge/impl-done"
-  },
-  "deeptk": {
-    "interviewer_model": "opus",
-    "analyst_model": "opus",
-    "researcher_model": "sonnet",
-    "architect_model": "opus",
-    "reviewer_model": "opus",
-    "designer_model": "opus",
-    "min_executor_model": "sonnet",
-    "analyzer_model": "sonnet",
-    "tester_model": "sonnet",
-    "fixer_model_initial": "sonnet",
-    "fixer_model_upgrade": "opus",
-    "haiku_collector_model": "haiku",
-    "security_reviewer_model": "opus",
-    "code_reviewer_model": "sonnet",
-    "knowledge_writer_model": "haiku",
-    "max_parallel_analyzers": 10,
-    "max_retry_count": 3,
-    "max_architect_redesign_retry": 2,
-    "max_fix_iterations": 5,
-    "commit_prefix": "[jwforge-deeptk]"
-  },
-  "surface": {
-    "commit_prefix": "[jwforge-surface]"
-  },
-  "retro": {
-    "analyzer_model": "opus",
-    "patcher_model": "sonnet",
-    "confidence_threshold": "HIGH",
-    "max_archives_per_run": 20,
-    "sequential_processing": true
+    "commit_prefix": "[forge]"
   },
   "cost_warning": {
     "enabled": true,
@@ -72,5 +37,9 @@
   "notifications": {
     "enabled": true,
     "triggers": ["phase_transition", "user_input_wait", "pipeline_complete", "pipeline_failure"]
+  },
+  "env": {
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1",
+    "CLAUDE_CODE_DISABLE_ADAPTIVE_THINKING": "1"
   }
 }
