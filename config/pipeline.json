@@ -1,0 +1,195 @@
+{
+  "version": "1.0.0",
+  "pipeline": "forge",
+  "trigger": "/forge",
+  "fix_trigger": "/fix",
+  "storage_dir": ".jwforge",
+  "phases": [
+    {
+      "phase": 1,
+      "name": "Discover",
+      "description": "Interview phase: classify task, gather context, conduct interview, write spec",
+      "required_artifacts": [],
+      "user_wait_steps": ["1-3"],
+      "steps": [
+        {
+          "id": "1-1",
+          "name": "classify",
+          "description": "Classify task type and complexity (S/M/L/XL)"
+        },
+        {
+          "id": "1-2",
+          "name": "context-collect",
+          "description": "Spawn haiku context collector subagents (parallel, count scales with complexity)"
+        },
+        {
+          "id": "1-3",
+          "name": "interview",
+          "description": "Present interview questions to user and collect answers (user_wait)"
+        },
+        {
+          "id": "1-4",
+          "name": "write-spec",
+          "description": "Write task-spec.md using template from collected context and interview answers"
+        },
+        {
+          "id": "1-5",
+          "name": "validate-spec",
+          "description": "Validate task-spec.md completeness and confidence"
+        }
+      ]
+    },
+    {
+      "phase": 2,
+      "name": "Design",
+      "description": "Architecture phase: Architect subagent designs the full implementation plan",
+      "required_artifacts": ["task-spec.md"],
+      "user_wait_steps": [],
+      "steps": [
+        {
+          "id": "2-1",
+          "name": "design",
+          "description": "Architect subagent (opus) reads task-spec.md and produces architecture.md"
+        },
+        {
+          "id": "2-2",
+          "name": "validate-design",
+          "description": "Validate architecture.md has Interface Contracts and Task List; display summary checkpoint"
+        }
+      ]
+    },
+    {
+      "phase": 3,
+      "name": "Build",
+      "description": "Implementation phase: Executor subagents implement tasks level by level",
+      "required_artifacts": ["task-spec.md", "architecture.md"],
+      "user_wait_steps": [],
+      "steps": [
+        {
+          "id": "3-1",
+          "name": "level-start",
+          "description": "Start an executor level: identify all tasks at current dependency level"
+        },
+        {
+          "id": "3-2",
+          "name": "execute",
+          "description": "Spawn Executor subagents in parallel (one per task at current level)"
+        },
+        {
+          "id": "3-3",
+          "name": "commit",
+          "description": "Commit completed level results with [forge] prefix"
+        },
+        {
+          "id": "3-4",
+          "name": "next-level",
+          "description": "Advance to next dependency level or proceed to Phase 4 if all levels done"
+        }
+      ]
+    },
+    {
+      "phase": 4,
+      "name": "Verify",
+      "description": "Verification phase: cross-file analysis, fix loop, final commit",
+      "required_artifacts": ["task-spec.md", "architecture.md"],
+      "user_wait_steps": [],
+      "steps": [
+        {
+          "id": "4-1",
+          "name": "verify",
+          "description": "Verifier subagent (opus) performs cross-file call-graph analysis on all changed files"
+        },
+        {
+          "id": "4-2",
+          "name": "fix",
+          "description": "Fixer subagent (sonnet, upgrades to opus) resolves cross-file and per-file issues"
+        },
+        {
+          "id": "4-3",
+          "name": "re-verify",
+          "description": "Re-run Verifier after fixes; loop back to fix if issues remain (up to max_fix_iterations)"
+        },
+        {
+          "id": "4-4",
+          "name": "done",
+          "description": "Archive pipeline, final [forge] commit, mark pipeline complete"
+        }
+      ]
+    }
+  ],
+  "valid_steps": [
+    "1-1", "1-2", "1-3", "1-4", "1-5",
+    "2-1", "2-2",
+    "3-1", "3-2", "3-3", "3-4",
+    "4-1", "4-2", "4-3", "4-4"
+  ],
+  "fix_mode": {
+    "description": "Standalone error-fixing mode triggered by /fix. Reuses Phase 4 steps only.",
+    "entry_phase": 4,
+    "entry_step": "4-1",
+    "steps": ["4-1", "4-2", "4-3", "4-4"]
+  },
+  "complexity_shortcuts": {
+    "S": {
+      "description": "Simple tasks skip Phase 2 (Design) and go directly from Phase 1 to Phase 3",
+      "skip_phases": [2]
+    }
+  },
+  "models": {
+    "architect": "opus",
+    "executor": "sonnet",
+    "verifier": "opus",
+    "fixer_initial": "sonnet",
+    "fixer_upgrade": "opus",
+    "haiku_collector": "haiku"
+  },
+  "limits": {
+    "max_executor_retries": 3,
+    "max_fix_iterations": 5,
+    "max_context_collectors": {
+      "S": 0,
+      "M": 2,
+      "L": 4,
+      "XL": 4
+    }
+  },
+  "git": {
+    "commit_prefix": "[forge]"
+  },
+  "cost_warning": {
+    "enabled": true,
+    "show_agent_estimate": true,
+    "confirm_on_xl": true
+  },
+  "state_schema": {
+    "description": "Expected shape of .jwforge/current/state.json",
+    "fields": {
+      "pipeline": "string — always 'forge'",
+      "mode": "string — 'default' | 'fix'",
+      "status": "string — 'in_progress' | 'done' | 'stopped' | 'error'",
+      "phase": "number — 1 | 2 | 3 | 4",
+      "step": "string — step ID e.g. '1-1'",
+      "phase_status": "string — 'in_progress' | 'done'",
+      "complexity": "string — 'S' | 'M' | 'L' | 'XL'",
+      "task_slug": "string — short slug for archive naming",
+      "current_level": "number — current executor dependency level (Phase 3 only)",
+      "fix_loop_count": "number — number of fix iterations completed (Phase 4 only)",
+      "waiting_for_user": "boolean — true while waiting for interview answers",
+      "started_at": "string — ISO timestamp",
+      "updated_at": "string — ISO timestamp"
+    },
+    "legal_transitions": {
+      "status": {
+        "in_progress": ["done", "stopped", "error"],
+        "stopped": ["in_progress"],
+        "done": [],
+        "error": ["in_progress"]
+      },
+      "phase": {
+        "description": "Phase can only advance by 1 (max). Never regress. S complexity skips 1->3.",
+        "max_advance": 1,
+        "s_complexity_skip": "1 -> 3"
+      }
+    }
+  }
+}
