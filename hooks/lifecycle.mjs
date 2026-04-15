@@ -69,9 +69,9 @@ async function handleCompact() {
     const complexity = state.complexity || '?';
 
     // Gather progress info
-    const completedLevels = state.phase3?.completed_levels || [];
-    const currentLevel = state.phase3?.current_level ?? 0;
-    const fixLoopCount = state.phase4?.fix_loop_count ?? 0;
+    const completedLevels = [];
+    const currentLevel = state.current_level ?? 0;
+    const fixLoopCount = state.fix_loop_count ?? 0;
 
     // Check for existing artifacts
     const possibleArtifacts = [

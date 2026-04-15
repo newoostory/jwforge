@@ -100,7 +100,7 @@ for hook in "${OLD_HOOKS[@]}"; do
   fi
 done
 
-OLD_SKILL_DIRS=("jwforge" "deeptk" "resume")
+OLD_SKILL_DIRS=("jwforge" "deeptk" "resume" "retro")
 for skill_dir in "${OLD_SKILL_DIRS[@]}"; do
   target="$CLAUDE_DIR/skills/$skill_dir"
   if [ -d "$target" ]; then
@@ -155,8 +155,8 @@ node -e "
   const hooksConfig = JSON.parse(fs.readFileSync('$HOOKS_JSON', 'utf8'));
   const installDir = '$INSTALL_DIR_ESC';
 
-  // Preserve non-JWForge settings, replace entire hooks section
-  settings.hooks = {};
+  // Preserve non-JWForge hooks; per-event entries in hooks.json will overwrite their events below
+  if (!settings.hooks) settings.hooks = {};
 
   // Set required env vars (preserve existing env)
   if (!settings.env) settings.env = {};

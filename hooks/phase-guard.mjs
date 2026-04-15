@@ -169,8 +169,8 @@ async function main() {
 
     // Determine the tool type by inspecting input fields.
     // Edit/Write have file_path; Bash has command.
-    const filePath = data.file_path || data.filePath || data.input?.file_path || '';
-    const command  = data.command  || data.input?.command  || '';
+    const filePath = data.tool_input?.file_path || data.input?.file_path || data.file_path || data.filePath || '';
+    const command  = data.tool_input?.command || data.input?.command || data.command || '';
 
     // Step 2a: For Bash — check if this is even a file-modifying operation.
     // Safe read-only commands bypass everything.

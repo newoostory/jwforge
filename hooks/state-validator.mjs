@@ -23,7 +23,6 @@ import {
   getCwd,
   readState,
   ALLOW,
-  ALLOW_MSG,
   BLOCK,
   JWFORGE_DIR,
   logHookError,
@@ -195,8 +194,7 @@ async function main() {
 
     // === RULE (f): Phase sub-status must be "done" before advancing ===
     if (newPhase > oldPhase) {
-      const phaseKey = `phase${oldPhase}`;
-      const phaseStatus = currentState[phaseKey]?.status;
+      const phaseStatus = currentState.phase_status;
       if (phaseStatus && phaseStatus !== 'done' && phaseStatus !== 'skipped') {
         console.log(BLOCK(`[JWForge State Validator] BLOCKED: Phase ${oldPhase} status is "${phaseStatus}", not "done". Complete the current phase before advancing.`));
         return;
