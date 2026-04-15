@@ -137,7 +137,7 @@ async function main() {
     // completes (status = "done") or on next explicit stop after resume.
     if (!wasInProgress) {
       const homeDir = process.env.HOME || process.env.USERPROFILE;
-      if (state.team_name && homeDir) {
+      if (state.team_name && homeDir && /^[a-zA-Z0-9_-]+$/.test(state.team_name)) {
         const teamDir = join(homeDir, '.claude', 'teams', state.team_name);
         const taskDir = join(homeDir, '.claude', 'tasks', state.team_name);
         if (existsSync(teamDir)) rmSync(teamDir, { recursive: true, force: true });

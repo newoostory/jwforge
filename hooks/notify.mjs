@@ -13,19 +13,18 @@
  * All errors are caught silently to never slow down the pipeline.
  */
 
-import { execSync } from 'child_process';
+import { execFileSync } from 'child_process';
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
-import { join } from 'path';
+import { join, resolve } from 'path';
 import { readStdin, getCwd } from './lib/common.mjs';
 
 function sendNotification(title, body) {
   try {
     if (process.platform === 'darwin') {
-      const escaped = body.replace(/'/g, "\\'");
-      const escapedTitle = title.replace(/'/g, "\\'");
-      execSync(`osascript -e 'display notification "${escaped}" with title "${escapedTitle}"'`, { timeout: 3000 });
+      const script = `display notification "${body.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}" with title "${title.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
+      execFileSync('osascript', ['-e', script], { timeout: 3000 });
     } else {
-      execSync(`notify-send ${JSON.stringify(title)} ${JSON.stringify(body)}`, { timeout: 3000 });
+      execFileSync('notify-send', [title, body], { timeout: 3000 });
     }
   } catch {
     // Fire-and-forget — silently ignore errors
@@ -133,6 +132,14 @@ async function handlePostToolUse(data) {
   }
 
   const cwd = getCwd();
+
+  // Validate filePath is within the expected .jwforge directory
+  const resolvedPath = resolve(filePath);
+  const expectedBase = resolve(join(cwd, '.jwforge'));
+  if (!resolvedPath.startsWith(expectedBase + '/')) {
+    console.log(JSON.stringify({ continue: true }));
+    return;
+  }
 
   // Read old state from cache (written on previous invocation)
   const oldState = readCachedState(cwd);
