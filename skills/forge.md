@@ -10,7 +10,7 @@ All thinking is done by agents. You only route, relay, and gate.
 |-------|------|--------|-----------|
 | 1 | Discover | interviewer, analyst, reviewer-phase1 | After review |
 | 2 | Design | researcher (xN parallel), designer, reviewer-phase2 | After review (show unit count for XL) |
-| 3 | Build | test-writer -> executor -> code-reviewer (per unit) | None (auto within phase) |
+| 3 | Build | test-writer -> executor -> code-reviewer (per unit) | After all units complete |
 | 4 | Validate | verifier, fixer, tester, reviewer-phase4 | None |
 
 ## Initialization
@@ -83,7 +83,10 @@ Auto-progress within this phase — no user gates between units.
 4. **Code-Reviewer** (sonnet): reviews Unit-N test + impl files
    - If FAIL: re-spawn executor (retry up to max_executor_retries from pipeline.json)
    - If PASS: git commit with `[forge]` prefix, advance to next unit
-5. On all units complete: phase3.status = "done"
+5. On all units complete:
+   - Update state-recorder: phase3.status = "done", waiting_for_user = true
+   - Present Phase 3 summary to user: "All N units implemented. Proceed to Validate?"
+   - On user approval: phase = 4, step = "4-1", waiting_for_user = false
 
 ### Error Escalation (Contract 7):
 - 1st failure -> retry same agent
