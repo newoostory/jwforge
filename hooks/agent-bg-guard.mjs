@@ -29,7 +29,7 @@ async function main() {
       return;
     }
 
-    const input = data.input || {};
+    const input = data.tool_input || data.input || {};
 
     if (input.run_in_background !== true) {
       console.log(BLOCK(
