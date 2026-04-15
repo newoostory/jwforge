@@ -1,5 +1,4 @@
 {
-  "description": "JWForge orchestration hooks — pipeline enforcement layer",
   "hooks": {
     "UserPromptSubmit": [
       {
@@ -7,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"$CLAUDE_PLUGIN_ROOT\"/hooks/keyword-detector.mjs",
+            "command": "node \"{{INSTALL_DIR}}\"/hooks/trigger.mjs",
             "timeout": 3
           }
         ]
@@ -15,22 +14,12 @@
     ],
     "PreToolUse": [
       {
-        "matcher": "EnterPlanMode",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node \"$CLAUDE_PLUGIN_ROOT\"/hooks/block-plan-mode.mjs",
-            "timeout": 3
-          }
-        ]
-      },
-      {
         "matcher": "Edit",
         "hooks": [
           {
             "type": "command",
-            "command": "node \"$CLAUDE_PLUGIN_ROOT\"/hooks/pre-tool-guard.mjs",
-            "timeout": 3
+            "command": "node \"{{INSTALL_DIR}}\"/hooks/phase-guard.mjs",
+            "timeout": 5
           }
         ]
       },
@@ -39,18 +28,13 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"$CLAUDE_PLUGIN_ROOT\"/hooks/pre-tool-guard.mjs",
-            "timeout": 3
+            "command": "node \"{{INSTALL_DIR}}\"/hooks/phase-guard.mjs",
+            "timeout": 5
           },
           {
             "type": "command",
-            "command": "node \"$CLAUDE_PLUGIN_ROOT\"/hooks/state-validator.mjs",
-            "timeout": 3
-          },
-          {
-            "type": "command",
-            "command": "node \"$CLAUDE_PLUGIN_ROOT\"/hooks/artifact-validator.mjs",
-            "timeout": 3
+            "command": "node \"{{INSTALL_DIR}}\"/hooks/state-validator.mjs",
+            "timeout": 5
           }
         ]
       },
@@ -59,44 +43,12 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"$CLAUDE_PLUGIN_ROOT\"/hooks/bash-guard.mjs",
-            "timeout": 3
+            "command": "node \"{{INSTALL_DIR}}\"/hooks/phase-guard.mjs",
+            "timeout": 5
           },
           {
             "type": "command",
-            "command": "node \"$CLAUDE_PLUGIN_ROOT\"/hooks/git-commit-guard.mjs",
-            "timeout": 3
-          }
-        ]
-      }
-    ],
-    "PostToolUse": [
-      {
-        "matcher": "Agent",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node \"$CLAUDE_PLUGIN_ROOT\"/hooks/subagent-tracker.mjs",
-            "timeout": 3
-          }
-        ]
-      },
-      {
-        "matcher": "Write",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node \"$CLAUDE_PLUGIN_ROOT\"/hooks/notify.mjs",
-            "timeout": 3
-          }
-        ]
-      },
-      {
-        "matcher": "Edit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node \"$CLAUDE_PLUGIN_ROOT\"/hooks/notify.mjs",
+            "command": "node \"{{INSTALL_DIR}}\"/hooks/commit-guard.mjs",
             "timeout": 3
           }
         ]
@@ -108,7 +60,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"$CLAUDE_PLUGIN_ROOT\"/hooks/pre-compact.mjs",
+            "command": "node \"{{INSTALL_DIR}}\"/hooks/lifecycle.mjs compact",
             "timeout": 5
           }
         ]
@@ -120,18 +72,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"$CLAUDE_PLUGIN_ROOT\"/hooks/persistent-mode.mjs",
+            "command": "node \"{{INSTALL_DIR}}\"/hooks/lifecycle.mjs stop",
             "timeout": 5
-          },
-          {
-            "type": "command",
-            "command": "node \"$CLAUDE_PLUGIN_ROOT\"/hooks/on-stop.mjs",
-            "timeout": 5
-          },
-          {
-            "type": "command",
-            "command": "node \"$CLAUDE_PLUGIN_ROOT\"/hooks/notify.mjs",
-            "timeout": 3
           }
         ]
       }

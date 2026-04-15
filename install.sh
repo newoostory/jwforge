@@ -1,296 +1,210 @@
 #!/usr/bin/env bash
-# JWForge Installer v2
-# Installs skills, commands, and hooks into Claude Code's .claude/ directory.
-# Supports both global (~/.claude) and project-local (.claude/) installation.
+# JWForge Installer
+# Installs skills, hooks, and runtime files into ~/.claude/
 
 set -e
 
 JWFORGE_HOME="$(cd "$(dirname "$0")" && pwd)"
-
-# --- Helpers ---
-
-# Cross-platform path handling
-to_node_path() {
-  if command -v cygpath &>/dev/null; then
-    cygpath -m "$1"
-  else
-    echo "$1"
-  fi
-}
-
-copy_file() {
-  local src="$1" dst="$2"
-  mkdir -p "$(dirname "$dst")"
-  cp "$src" "$dst"
-}
-
-copy_dir() {
-  local src="$1" dst="$2"
-  mkdir -p "$dst"
-  cp -r "$src"/* "$dst"/ 2>/dev/null || true
-}
-
-# --- Parse arguments ---
-
-INSTALL_MODE="global"   # global = ~/.claude, local = ./.claude (project)
-TARGET_PROJECT=""
-
-usage() {
-  echo "Usage: bash install.sh [OPTIONS]"
-  echo ""
-  echo "Options:"
-  echo "  --global           Install to ~/.claude (default)"
-  echo "  --local [PATH]     Install to <PATH>/.claude (default: current dir)"
-  echo "  --help             Show this help"
-  echo ""
-  echo "Examples:"
-  echo "  bash install.sh                        # Global install"
-  echo "  bash install.sh --local                # Install into current project"
-  echo "  bash install.sh --local /path/to/proj  # Install into specific project"
-}
-
-while [[ $# -gt 0 ]]; do
-  case $1 in
-    --global)
-      INSTALL_MODE="global"
-      shift
-      ;;
-    --local)
-      INSTALL_MODE="local"
-      if [[ -n "$2" && ! "$2" =~ ^-- ]]; then
-        TARGET_PROJECT="$2"
-        shift
-      fi
-      shift
-      ;;
-    --help|-h)
-      usage
-      exit 0
-      ;;
-    *)
-      echo "Unknown option: $1"
-      usage
-      exit 1
-      ;;
-  esac
-done
-
-# --- Determine target directory ---
-
-if [[ "$INSTALL_MODE" == "global" ]]; then
-  CLAUDE_DIR="$HOME/.claude"
-  echo "JWForge Installer (global)"
-  echo "=========================="
-else
-  if [[ -n "$TARGET_PROJECT" ]]; then
-    CLAUDE_DIR="$TARGET_PROJECT/.claude"
-  else
-    CLAUDE_DIR="$(pwd)/.claude"
-  fi
-  echo "JWForge Installer (local)"
-  echo "========================="
-fi
-
-JWFORGE_HOME_NODE="$(to_node_path "$JWFORGE_HOME")"
+CLAUDE_DIR="$HOME/.claude"
+INSTALL_DIR="$CLAUDE_DIR/jwforge"
 SETTINGS_FILE="$CLAUDE_DIR/settings.json"
-SETTINGS_FILE_NODE="$(to_node_path "$SETTINGS_FILE")"
 
+echo "JWForge Installer"
+echo "================="
 echo "Source:  $JWFORGE_HOME"
 echo "Target:  $CLAUDE_DIR"
 echo ""
 
-# --- 1. Install Skills ---
+# --- 1. Create directories ---
 
-echo "[1/5] Installing skills..."
+echo "[1/5] Creating directories..."
 
-# Install all skills from skill-sources/
-for skill_dir in "$JWFORGE_HOME/skill-sources"/*/; do
-  skill_name="$(basename "$skill_dir")"
-  TARGET_SKILL="$CLAUDE_DIR/skills/$skill_name"
-  mkdir -p "$TARGET_SKILL"
-  copy_file "$skill_dir/SKILL.md" "$TARGET_SKILL/SKILL.md"
-  # Copy skill-local subdirectories (e.g., references/)
-  for subdir in "$skill_dir"*/; do
-    if [[ -d "$subdir" ]]; then
-      subdir_name="$(basename "$subdir")"
-      copy_dir "$subdir" "$TARGET_SKILL/$subdir_name"
-      echo "  [OK] /$skill_name/$subdir_name/ -> $TARGET_SKILL/$subdir_name/"
-    fi
-  done
-  echo "  [OK] /$skill_name skill -> $TARGET_SKILL/SKILL.md"
+mkdir -p "$CLAUDE_DIR/skills/forge"
+mkdir -p "$INSTALL_DIR/skills"
+mkdir -p "$INSTALL_DIR/agents"
+mkdir -p "$INSTALL_DIR/config"
+mkdir -p "$INSTALL_DIR/templates"
+mkdir -p "$INSTALL_DIR/hooks"
+mkdir -p "$INSTALL_DIR/hooks/lib"
+
+echo "  [OK] Directories created"
+
+# --- 2. Copy files ---
+
+echo "[2/5] Copying files..."
+
+# Skill discovery wrapper
+cp "$JWFORGE_HOME/skill-sources/forge/SKILL.md" "$CLAUDE_DIR/skills/forge/SKILL.md"
+echo "  [OK] skill-sources/forge/SKILL.md -> ~/.claude/skills/forge/SKILL.md"
+
+# Full skill file
+cp "$JWFORGE_HOME/skills/forge.md" "$INSTALL_DIR/skills/forge.md"
+echo "  [OK] skills/forge.md -> ~/.claude/jwforge/skills/forge.md"
+
+# Agent prompts
+for f in "$JWFORGE_HOME/agents/"*.md; do
+  [ -f "$f" ] || continue
+  cp "$f" "$INSTALL_DIR/agents/$(basename "$f")"
+done
+echo "  [OK] agents/*.md -> ~/.claude/jwforge/agents/"
+
+# Config
+cp "$JWFORGE_HOME/config/pipeline.json" "$INSTALL_DIR/config/pipeline.json"
+echo "  [OK] config/pipeline.json -> ~/.claude/jwforge/config/"
+
+# Templates
+for f in "$JWFORGE_HOME/templates/"*.md; do
+  [ -f "$f" ] || continue
+  cp "$f" "$INSTALL_DIR/templates/$(basename "$f")"
+done
+echo "  [OK] templates/*.md -> ~/.claude/jwforge/templates/"
+
+# Hooks
+for f in "$JWFORGE_HOME/hooks/"*.mjs; do
+  [ -f "$f" ] || continue
+  cp "$f" "$INSTALL_DIR/hooks/$(basename "$f")"
+done
+echo "  [OK] hooks/*.mjs -> ~/.claude/jwforge/hooks/"
+
+# Hook library
+for f in "$JWFORGE_HOME/hooks/lib/"*.mjs; do
+  [ -f "$f" ] || continue
+  cp "$f" "$INSTALL_DIR/hooks/lib/$(basename "$f")"
+done
+echo "  [OK] hooks/lib/*.mjs -> ~/.claude/jwforge/hooks/lib/"
+
+# --- 3. Cleanup old files ---
+
+echo "[3/5] Cleaning up old files..."
+
+OLD_HOOKS=(
+  "pre-tool-guard.mjs"
+  "bash-guard.mjs"
+  "block-plan-mode.mjs"
+  "keyword-detector.mjs"
+  "notify.mjs"
+  "subagent-tracker.mjs"
+  "artifact-validator.mjs"
+  "persistent-mode.mjs"
+  "on-stop.mjs"
+  "pre-compact.mjs"
+  "git-commit-guard.mjs"
+  "agent-bg-guard.mjs"
+)
+
+for hook in "${OLD_HOOKS[@]}"; do
+  target="$INSTALL_DIR/hooks/$hook"
+  if [ -f "$target" ]; then
+    rm "$target"
+    echo "  [CLEAN] Removed old hook: $hook"
+  fi
 done
 
-# --- 2. Install JWForge runtime files ---
+OLD_SKILL_DIRS=("jwforge" "deeptk" "resume")
+for skill_dir in "${OLD_SKILL_DIRS[@]}"; do
+  target="$CLAUDE_DIR/skills/$skill_dir"
+  if [ -d "$target" ]; then
+    rm -rf "$target"
+    echo "  [CLEAN] Removed old skills dir: ~/.claude/skills/$skill_dir/"
+  fi
+done
 
-echo "[2/5] Installing runtime files..."
+OLD_SKILL_FILES=("jwforge.md" "deeptk.md" "retro.md")
+for skill_file in "${OLD_SKILL_FILES[@]}"; do
+  target="$INSTALL_DIR/skills/$skill_file"
+  if [ -f "$target" ]; then
+    rm "$target"
+    echo "  [CLEAN] Removed old skill file: $skill_file"
+  fi
+done
 
-# Create jwforge runtime directory inside .claude
-RUNTIME_DIR="$CLAUDE_DIR/jwforge"
-mkdir -p "$RUNTIME_DIR"
-
-# --- Stale file cleanup ---
-echo "[CLEAN] Removing stale files from previous installation..."
-if [ -d "$RUNTIME_DIR" ]; then
-  for target_file in "$RUNTIME_DIR"/hooks/*.mjs "$RUNTIME_DIR"/hooks/*.js \
-                     "$RUNTIME_DIR"/agents/*.md "$RUNTIME_DIR"/skills/*.md; do
-    if [ -f "$target_file" ]; then
-      src_relative="${target_file#$RUNTIME_DIR/}"
-      if [ ! -f "$JWFORGE_HOME/$src_relative" ]; then
-        rm "$target_file"
-        echo "  [CLEAN] Removed stale: $src_relative"
+NEW_AGENTS=("architect.md" "executor.md" "verifier.md" "fixer.md")
+if [ -d "$INSTALL_DIR/agents" ]; then
+  for agent_file in "$INSTALL_DIR/agents/"*.md; do
+    [ -f "$agent_file" ] || continue
+    agent_name="$(basename "$agent_file")"
+    is_new=0
+    for new_agent in "${NEW_AGENTS[@]}"; do
+      if [ "$agent_name" = "$new_agent" ]; then
+        is_new=1
+        break
       fi
+    done
+    if [ "$is_new" -eq 0 ]; then
+      rm "$agent_file"
+      echo "  [CLEAN] Removed old agent: $agent_name"
     fi
   done
 fi
 
-# Copy agents, templates, config, hooks
-copy_dir "$JWFORGE_HOME/agents" "$RUNTIME_DIR/agents"
-echo "  [OK] agents/ -> $RUNTIME_DIR/agents/"
-
-copy_dir "$JWFORGE_HOME/templates" "$RUNTIME_DIR/templates"
-echo "  [OK] templates/ -> $RUNTIME_DIR/templates/"
-
-copy_dir "$JWFORGE_HOME/config" "$RUNTIME_DIR/config"
-echo "  [OK] config/ -> $RUNTIME_DIR/config/"
-
-copy_dir "$JWFORGE_HOME/hooks" "$RUNTIME_DIR/hooks"
-echo "  [OK] hooks/ -> $RUNTIME_DIR/hooks/"
-
-# Copy skill source files (referenced by commands)
-copy_dir "$JWFORGE_HOME/skills" "$RUNTIME_DIR/skills"
-echo "  [OK] skills/ -> $RUNTIME_DIR/skills/"
-
-# --- 3. Patch paths in installed files ---
-
-echo "[3/5] Configuring paths..."
-
-RUNTIME_DIR_NODE="$(to_node_path "$RUNTIME_DIR")"
-
-# Patch all SKILL.md files to reference the runtime directory
-for skill_file in "$CLAUDE_DIR/skills"/*/SKILL.md; do
-  if [[ -f "$skill_file" ]]; then
-    sed -i "s|Read(\"skills/|Read(\"$RUNTIME_DIR_NODE/skills/|g" "$skill_file"
-    sed -i "s|Read(\"config/|Read(\"$RUNTIME_DIR_NODE/config/|g" "$skill_file"
-    sed -i "s|in \`agents/\`|in \`$RUNTIME_DIR_NODE/agents/\`|g" "$skill_file"
-    sed -i "s|in \`templates/\`|in \`$RUNTIME_DIR_NODE/templates/\`|g" "$skill_file"
-    # Patch skill-local reference paths (references/ within skill dirs)
-    _skill_name="$(basename "$(dirname "$skill_file")")"
-    _skill_dir_node="$(to_node_path "$CLAUDE_DIR/skills/$_skill_name")"
-    sed -i "s|Read(\"references/|Read(\"$_skill_dir_node/references/|g" "$skill_file"
-  fi
-done
-
-echo "  [OK] Paths configured to $RUNTIME_DIR_NODE"
-
-# --- 4. Register hooks ---
+# --- 4. Register hooks in settings.json ---
 
 echo "[4/5] Registering hooks..."
 
-# Read hooks.json and register into settings.json
-HOOKS_JSON="$JWFORGE_HOME/hooks/hooks.json"
-if [[ -f "$HOOKS_JSON" ]]; then
-  HOOKS_JSON_NODE="$(to_node_path "$HOOKS_JSON")"
-
-  if [ ! -f "$SETTINGS_FILE" ]; then
-    echo '{}' > "$SETTINGS_FILE"
-  fi
-
-  node -e "
-    const fs = require('fs');
-    const raw = fs.readFileSync('$SETTINGS_FILE_NODE', 'utf8').replace(/^\uFEFF/, '');
-    const settings = JSON.parse(raw);
-    const hooksConfig = JSON.parse(fs.readFileSync('$HOOKS_JSON_NODE', 'utf8'));
-
-    if (!settings.hooks) settings.hooks = {};
-
-    // Replace \$CLAUDE_PLUGIN_ROOT with actual runtime path
-    const runtimePath = '$RUNTIME_DIR_NODE';
-    const replaceRoot = (cmd) => cmd.replace(/\\\$CLAUDE_PLUGIN_ROOT|\\\"\\\$CLAUDE_PLUGIN_ROOT\\\"/g, '\"' + runtimePath + '\"').replace(/\"\"/g, '\"');
-
-    // Remove old JWForge hooks from every event array (handles both flat and nested formats)
-    for (const event of Object.keys(settings.hooks)) {
-      settings.hooks[event] = (settings.hooks[event] || []).filter(h => {
-        // Old flat format: { matcher, command, timeout }
-        if (typeof h.command === 'string' && h.command.includes('jwforge')) return false;
-        // New nested format: { matcher, hooks: [{ type, command, timeout }] }
-        if (Array.isArray(h.hooks) && h.hooks.some(inner => inner.command && inner.command.includes('jwforge'))) return false;
-        return true;
-      });
-    }
-
-    // Add fresh JWForge hooks in correct nested format
-    for (const [event, matchers] of Object.entries(hooksConfig.hooks || {})) {
-      if (!settings.hooks[event]) settings.hooks[event] = [];
-      for (const matcher of matchers) {
-        const entry = {
-          matcher: matcher.matcher || '',
-          hooks: matcher.hooks.map(hook => {
-            const h = { type: hook.type || 'command', command: replaceRoot(hook.command) };
-            if (hook.timeout) h.timeout = hook.timeout;
-            return h;
-          })
-        };
-        settings.hooks[event].push(entry);
-      }
-    }
-
-    fs.writeFileSync('$SETTINGS_FILE_NODE', JSON.stringify(settings, null, 2));
-  "
-  echo "  [OK] Hooks merged from hooks.json (old JWForge hooks replaced, others preserved)"
-else
-  echo "  [WARN] hooks.json not found, skipping hook registration"
+if [ ! -f "$SETTINGS_FILE" ]; then
+  echo '{}' > "$SETTINGS_FILE"
 fi
 
-# --- 5/5. Add .jwforge/ to gitignore ---
+HOOKS_JSON="$JWFORGE_HOME/hooks/hooks.json"
+INSTALL_DIR_ESC="$INSTALL_DIR"
+
+node -e "
+  const fs = require('fs');
+  const raw = fs.readFileSync('$SETTINGS_FILE', 'utf8').replace(/^\uFEFF/, '');
+  const settings = JSON.parse(raw);
+  const hooksConfig = JSON.parse(fs.readFileSync('$HOOKS_JSON', 'utf8'));
+  const installDir = '$INSTALL_DIR_ESC';
+
+  // Preserve non-JWForge settings, replace entire hooks section
+  settings.hooks = {};
+
+  // Set required env vars (preserve existing env)
+  if (!settings.env) settings.env = {};
+  settings.env['CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS'] = '0';
+  settings.env['CLAUDE_CODE_DISABLE_ADAPTIVE_THINKING'] = '1';
+
+  // Replace {{INSTALL_DIR}} with actual path and build hooks
+  const replaceDir = (cmd) => cmd.replace(/\{\{INSTALL_DIR\}\}/g, installDir);
+
+  for (const [event, matchers] of Object.entries(hooksConfig.hooks || {})) {
+    settings.hooks[event] = [];
+    for (const matcher of matchers) {
+      const entry = {
+        matcher: matcher.matcher || '',
+        hooks: matcher.hooks.map(hook => {
+          const h = { type: hook.type || 'command', command: replaceDir(hook.command) };
+          if (hook.timeout) h.timeout = hook.timeout;
+          return h;
+        })
+      };
+      settings.hooks[event].push(entry);
+    }
+  }
+
+  fs.writeFileSync('$SETTINGS_FILE', JSON.stringify(settings, null, 2));
+"
+
+echo "  [OK] Hooks registered, env vars set"
+
+# --- 5. Add .jwforge/ to gitignore ---
 
 echo "[5/5] Configuring gitignore..."
 
-if [[ "$INSTALL_MODE" == "global" ]]; then
-  GITIGNORE="$HOME/.gitignore_global"
-  if [ -f "$GITIGNORE" ]; then
-    if ! grep -q ".jwforge/" "$GITIGNORE" 2>/dev/null; then
-      echo ".jwforge/" >> "$GITIGNORE"
-      echo "  [OK] Added .jwforge/ to global gitignore"
-    fi
+GITIGNORE="$HOME/.gitignore_global"
+if [ -f "$GITIGNORE" ]; then
+  if ! grep -q "\.jwforge/" "$GITIGNORE" 2>/dev/null; then
+    echo ".jwforge/" >> "$GITIGNORE"
+    echo "  [OK] Added .jwforge/ to global gitignore"
   else
-    echo ".jwforge/" > "$GITIGNORE"
-    git config --global core.excludesfile "$GITIGNORE" 2>/dev/null || true
-    echo "  [OK] Created global gitignore with .jwforge/"
+    echo "  [OK] .jwforge/ already in global gitignore"
   fi
 else
-  # Local: add to project .gitignore
-  PROJECT_DIR="$(dirname "$CLAUDE_DIR")"
-  GITIGNORE="$PROJECT_DIR/.gitignore"
-  if [ -f "$GITIGNORE" ]; then
-    if ! grep -q ".jwforge/" "$GITIGNORE" 2>/dev/null; then
-      echo "" >> "$GITIGNORE"
-      echo "# JWForge runtime state" >> "$GITIGNORE"
-      echo ".jwforge/" >> "$GITIGNORE"
-      echo "  [OK] Added .jwforge/ to project .gitignore"
-    fi
-  else
-    echo "# JWForge runtime state" > "$GITIGNORE"
-    echo ".jwforge/" >> "$GITIGNORE"
-    echo "  [OK] Created .gitignore with .jwforge/"
-  fi
+  echo ".jwforge/" > "$GITIGNORE"
+  git config --global core.excludesfile "$GITIGNORE" 2>/dev/null || true
+  echo "  [OK] Created global gitignore with .jwforge/"
 fi
 
-
 # --- Done ---
-
-# Write install metadata for uninstaller
-REPO_VERSION=$(node -e "try{const s=JSON.parse(require('fs').readFileSync('$(to_node_path "$JWFORGE_HOME/config/settings.json")', 'utf8'));console.log(s.version||'unknown')}catch(e){console.log('unknown')}" 2>/dev/null || echo "unknown")
-INSTALL_COMMIT=$(cd "$JWFORGE_HOME" && git rev-parse --short HEAD 2>/dev/null || echo "unknown")
-cat > "$RUNTIME_DIR/.install-meta.json" <<EOF
-{
-  "version": "$REPO_VERSION",
-  "commit": "$INSTALL_COMMIT",
-  "installed_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-  "install_mode": "$INSTALL_MODE",
-  "source": "$JWFORGE_HOME_NODE",
-  "target": "$(to_node_path "$CLAUDE_DIR")"
-}
-EOF
 
 echo ""
 echo "================================"
@@ -298,7 +212,6 @@ echo "  JWForge installed successfully"
 echo "================================"
 echo ""
 echo "Skills available:"
-echo "  /deep <task>     Full pipeline (new features, complex changes)"
-echo "  /deeptk <task>   Heavy pipeline with relay architecture (M/L/XL tasks)"
+echo "  /forge <task>   Full pipeline (interview -> design -> build -> verify)"
+echo "  /fix            Fix-only mode (Phase 4 verification + repair)"
 echo ""
-echo "To uninstall: bash $JWFORGE_HOME/uninstall.sh $([ "$INSTALL_MODE" == "local" ] && echo "--local $(dirname "$CLAUDE_DIR")")"
