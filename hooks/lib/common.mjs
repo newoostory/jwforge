@@ -185,6 +185,27 @@ export function isPipelineArtifact(filePath, cwd) {
   }
 }
 
+// --- Artifact Ownership Map ---
+
+/**
+ * Returns the owning agent role for a given pipeline artifact filename,
+ * or null if the file is not an agent-owned artifact.
+ *
+ * @param {string} filename - Basename of the file (e.g. 'task-spec.md').
+ * @returns {string|null} Agent role name, or null.
+ */
+export function getArtifactOwner(filename) {
+  const OWNERSHIP_MAP = {
+    'interview-log.md': 'interviewer',
+    'task-spec.md': 'analyst',
+    'architecture.md': 'designer',
+  };
+  if (OWNERSHIP_MAP[filename]) return OWNERSHIP_MAP[filename];
+  if (/^analysis-.*\.md$/.test(filename)) return 'researcher';
+  if (/^review-phase\d+\.md$/.test(filename)) return 'reviewer';
+  return null; // not an agent-owned artifact
+}
+
 // --- Architecture File Check ---
 
 /**

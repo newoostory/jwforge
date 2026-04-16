@@ -26,6 +26,7 @@ import {
   isPipelineArtifact,
   checkPipelineLock,
   evaluatePhaseGuard,
+  getArtifactOwner,
   ALLOW,
   BLOCK,
   ALLOW_MSG,
@@ -172,6 +173,40 @@ async function main() {
     const filePath = data.tool_input?.file_path || data.input?.file_path || data.file_path || data.filePath || '';
     const command  = data.tool_input?.command || data.input?.command || data.command || '';
 
+    // Early state read — needed by R6 (state.json protection) and R1 (artifact ownership)
+    // checks that must run BEFORE safe-command bypass and blanket pipeline-artifact ALLOW.
+    const state = readState(cwd);
+
+    // R6 — Block Edit/Bash to state.json; only Write (via state-validator) is allowed.
+    // This check runs before the safe-command bypass (Step 2a) because Bash commands like
+    // `echo '{}' > state.json` match safe patterns but must still be blocked for state.json.
+    if (state && state.status === 'in_progress') {
+      const normalizedPath = filePath.replace(/\\/g, '/');
+      const isStateJson = normalizedPath.endsWith('state.json') && normalizedPath.includes('.jwforge/current/');
+
+      // Also check Bash command redirect targets for state.json
+      let bashTargetsStateJson = false;
+      if (!isStateJson && command) {
+        const targets = extractWriteTargets(command);
+        bashTargetsStateJson = targets.some(t => {
+          const nt = t.replace(/\\/g, '/');
+          return nt.endsWith('state.json') && nt.includes('.jwforge/current/');
+        });
+      }
+
+      if (isStateJson || bashTargetsStateJson) {
+        // Edit tool has old_string/new_string but no content
+        // Bash tool has command
+        // Write tool has content — Write goes through state-validator which checks _recorder
+        const isEdit = data.tool_input?.old_string !== undefined;
+        const isBash = data.tool_input?.command !== undefined;
+        if (isEdit || isBash) {
+          console.log(BLOCK('state.json must be written via state-recorder using the Write tool only. Edit and Bash to state.json are blocked.'));
+          return;
+        }
+      }
+    }
+
     // Step 2a: For Bash — check if this is even a file-modifying operation.
     // Safe read-only commands bypass everything.
     if (command) {
@@ -190,6 +225,41 @@ async function main() {
     if (!command && !filePath) {
       console.log(ALLOW);
       return;
+    }
+
+    // R1 — Artifact ownership: agent-owned .jwforge/current/ files must have content marker
+    if (state && state.status === 'in_progress' && filePath && isPipelineArtifact(filePath, cwd)) {
+      const fileName = filePath.replace(/\\/g, '/').split('/').pop();
+      const owner = getArtifactOwner(fileName);
+      if (owner) {
+        const isEdit = data.tool_input?.old_string !== undefined;
+        const isBash = data.tool_input?.command !== undefined;
+        const content = data.tool_input?.content || '';
+
+        // Edit to agent-owned artifacts: always block
+        if (isEdit) {
+          console.log(BLOCK(`"${fileName}" is owned by the ${owner} agent. Use Write with full content including <!-- _agent: ${owner} --> marker, not Edit.`));
+          return;
+        }
+
+        // Bash to agent-owned artifacts: block (can't include content marker)
+        if (isBash) {
+          console.log(BLOCK(`"${fileName}" is owned by the ${owner} agent. Bash writes to agent-owned artifacts are blocked.`));
+          return;
+        }
+
+        // Write tool: validate content marker
+        const firstLine = content.split('\n')[0]?.trim() || '';
+        const markerMatch = firstLine.match(/^<!--\s*_agent:\s*(\w+)\s*-->$/);
+        if (!markerMatch) {
+          console.log(BLOCK(`"${fileName}" is owned by the ${owner} agent. Content must start with <!-- _agent: ${owner} --> as the very first line.`));
+          return;
+        }
+        if (markerMatch[1] !== owner) {
+          console.log(BLOCK(`"${fileName}" is owned by the ${owner} agent, but content has <!-- _agent: ${markerMatch[1]} --> marker. Wrong agent.`));
+          return;
+        }
+      }
     }
 
     // Step 3: Pipeline artifacts (.jwforge/**) are always writable.
@@ -229,7 +299,6 @@ async function main() {
     }
 
     // Step 6: No active pipeline → allow everything.
-    const state = readState(cwd);
     if (!state || state.status !== 'in_progress') {
       console.log(ALLOW);
       return;
