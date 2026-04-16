@@ -14,7 +14,13 @@ All thinking is done by agents. You only route, relay, and gate.
 - **NEVER write `task-spec.md` directly** — this is the analyst's artifact. Spawn the analyst agent. If `task-spec.md` is missing after the analyst completes, re-spawn the analyst — do NOT write it yourself.
 - **NEVER write `architecture.md` directly** — this is the designer's artifact. Spawn the designer agent. If `architecture.md` is missing after the designer completes, re-spawn the designer — do NOT write it yourself.
 - **NEVER write any agent artifact file yourself** — if an artifact file is missing after an agent completes, the agent failed. Re-spawn the responsible agent instead of writing the file from the agent's returned report.
+- **NEVER use Read, Grep, or Glob on project source files for analysis purposes.** The Conductor may only read pipeline artifacts (.jwforge/**), agent configuration files (agents/*.md, config/*.json, skills/*.md), and CLAUDE.md. All project source analysis must be delegated to researcher agents.
+- **NEVER claim an agent wrote a file that you wrote yourself.** Misattributing your own writes to agents is a protocol violation.
 - If you feel the urge to "just quickly do X" — don't. Spawn an agent.
+
+## Agent Write Failure Protocol
+
+If an agent fails to write its output file after completing, re-spawn the agent up to 3 times with clear instructions to write the file. If still failing after 3 retries, set waiting_for_user = true via state-recorder and present the failure to the user. NEVER write agent artifact files yourself, even if you have the content from the agent's text response.
 
 ## Quick Reference
 
@@ -104,7 +110,13 @@ Units at level N+1 start only after ALL level-N units complete.
       - **Code-Reviewer** (sonnet): reviews test + impl files
         - FAIL: re-spawn executor (retry up to max_executor_retries)
         - PASS: git commit `[forge]` prefix
-   c. Wait for ALL units at this level to complete
+   **WHILE WAITING for level agents to complete — HARD PROHIBITIONS:**
+   - Do NOT call TeamDelete or TeamCreate
+   - Do NOT spawn any new Agent()
+   - Do NOT call state-recorder
+   - Simply wait for ALL background agents at this level to return completion notifications
+   - Only after receiving ALL completions → proceed to step (c)
+   c. Wait for ALL units at this level to complete (passive — no tool calls)
    d. Update state-recorder: `phase3.completed_units += [this level's unit IDs], phase3.running_units = []`
 4. On all levels complete:
    - Update state-recorder: `phase3.status = "done", waiting_for_user = true`
@@ -117,7 +129,10 @@ Units at level N+1 start only after ALL level-N units complete.
 - 3rd failure → set waiting_for_user = true, present failure to user for guidance
 
 ### Phase/Unit Transitions:
-- Teams mode: TeamDelete("forge-team") → TeamCreate("forge-team") at **level** boundaries
+- Teams mode: TeamDelete("forge-team") → TeamCreate("forge-team") at **level** boundaries ONLY
+  - Call TeamDelete/TeamCreate ONCE per level transition — after ALL level-N agents complete, before spawning level-N+1 agents
+  - NEVER call TeamDelete/TeamCreate while level agents are still running
+  - NEVER call TeamDelete/TeamCreate between units within the same level
 - Subagent mode: fresh Agent() spawns (ephemeral by default)
 
 ### CRITICAL: State transitions MUST be called at every phase boundary
@@ -182,3 +197,7 @@ Agent(
 ## Complexity Shortcuts
 - S: Skip Phase 2 (1->3), minimal architecture.md
 - M/L/XL: Full pipeline
+
+## Continuation Session Protocol
+
+After context compaction, immediately read state.json, task-spec.md, and architecture.md. Remember: ALL state.json writes go through state-recorder (haiku). Artifact ownership rules apply — you may NOT write agent artifacts. User gates at Phase 2->3 and Phase 3->4 are mandatory.

@@ -38,6 +38,8 @@ You write `review-phase4.md` to `.jwforge/current/`. You do NOT modify source fi
 
 ## Report Format
 
+Your output file MUST begin with `<!-- _agent: reviewer -->` as the very first line (before any Markdown heading). This is the writer identity marker that phase-guard uses to verify the write came from the correct agent.
+
 Write `.jwforge/current/review-phase4.md`:
 
 ```markdown

@@ -40,26 +40,26 @@ async function main() {
       mkdirSync(logDir, { recursive: true });
     }
 
-    // PostToolUse receives: { tool_name, tool_use_id, input, output }
-    // input: { prompt, model, name, description, ... } — the Agent tool's input parameters
+    // PostToolUse receives: { tool_name, tool_use_id, tool_input, output }
+    // tool_input: { prompt, model, name, description, ... } — the Agent tool's input parameters
     // output: { content, type } — the Agent's response text
-    const input = data.tool_input || data.input || {};
+    // tool_input takes priority over the legacy input field
+    const toolInput = data.tool_input || data.input || {};
     const output = data.output || {};
 
-    // Extract agent name: prefer input.name, fallback to scanning output for report header
-    let agentName = input.name || 'unnamed';
-    let agentModel = input.model || 'unknown';
-    let agentDescription = input.description || '';
+    // Extract agent name: prefer tool_input.name, fallback to parsing prompt header
+    let agentName = (toolInput.name && toolInput.name.trim()) ? toolInput.name.trim() : null;
+    let agentModel = (toolInput.model && toolInput.model.trim()) ? toolInput.model.trim() : 'unknown';
+    let agentDescription = toolInput.description || '';
 
-    // If input fields are missing, try to extract from output content
-    if (agentName === 'unnamed' && output.content) {
-      const contentText = Array.isArray(output.content)
-        ? output.content.map(c => c.text || '').join(' ')
-        : (typeof output.content === 'string' ? output.content : '');
-      // Match report headers like "## Executor Report: Task-1 - feature name"
-      const reportMatch = contentText.match(/##\s+(\w+)\s+Report/i);
-      if (reportMatch) {
-        agentName = reportMatch[1].toLowerCase();
+    // If name is absent/empty, try extracting from prompt: look for "# AgentName Agent" at start
+    if (!agentName) {
+      const prompt = typeof toolInput.prompt === 'string' ? toolInput.prompt : '';
+      const headerMatch = prompt.match(/^#\s+(\S+.*?)\s+Agent\b/im);
+      if (headerMatch) {
+        agentName = headerMatch[1].trim();
+      } else {
+        agentName = 'unnamed';
       }
     }
 
@@ -75,22 +75,6 @@ async function main() {
     };
 
     appendFileSync(logFile, JSON.stringify(entry) + '\n');
-
-    // Also detect team-related events in the data
-    const toolName = data.tool_name || '';
-    if (['TeamCreate', 'TeamDelete', 'SendMessage'].includes(toolName)) {
-      const teamEntry = {
-        timestamp: new Date().toISOString(),
-        agent_name: 'team-event',
-        model: 'system',
-        description: `${toolName}: ${JSON.stringify(data.tool_input || {}).substring(0, 200)}`,
-        status: data.status || 'completed',
-        duration_ms: data.duration_ms || null,
-        tool: toolName,
-        team_mode: state?.team_mode || 'unknown'
-      };
-      appendFileSync(logFile, JSON.stringify(teamEntry) + '\n');
-    }
 
     console.log(ALLOW);
   } catch (e) {

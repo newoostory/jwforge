@@ -65,6 +65,8 @@ Incorporate the feasibility report into your verdict.
 
 ## Output
 
+Your output file MUST begin with `<!-- _agent: reviewer -->` as the very first line (before any Markdown heading). This is the writer identity marker that phase-guard uses to verify the write came from the correct agent.
+
 Write `.jwforge/current/review-phase2.md` with this content, and return the same as your final response:
 
 ```markdown

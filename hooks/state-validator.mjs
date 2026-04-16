@@ -205,7 +205,7 @@ async function main() {
 
     // === RULE (f): Phase sub-status must be "done" before advancing ===
     if (newPhase > oldPhase) {
-      const phaseStatus = currentState[`phase${oldPhase}`]?.status;
+      const phaseStatus = newState[`phase${oldPhase}`]?.status ?? currentState[`phase${oldPhase}`]?.status;
       if (phaseStatus && phaseStatus !== 'done' && phaseStatus !== 'skipped') {
         console.log(BLOCK(`[JWForge State Validator] BLOCKED: Phase ${oldPhase} status is "${phaseStatus}", not "done". Complete the current phase before advancing.`));
         return;
@@ -219,6 +219,24 @@ async function main() {
       if (!validSteps.includes(newStep)) {
         console.log(BLOCK(`[JWForge State Validator] BLOCKED: Unrecognized step "${newStep}" for forge pipeline. Valid steps: ${validSteps.join(', ')}.`));
         return;
+      }
+    }
+
+    // === RULE (h): User gate enforcement for phase 2->3 and 3->4 ===
+    // The Conductor must set waiting_for_user=true via state-recorder BEFORE advancing phase.
+    // This proves the user gate was shown. We check currentState (disk), not newState.
+    if (newPhase > oldPhase) {
+      if ((oldPhase === 2 && newPhase === 3) || (oldPhase === 3 && newPhase === 4)) {
+        const complexity = newState.complexity || currentState.complexity;
+        if (complexity !== 'S') {
+          if (currentState.waiting_for_user !== true) {
+            console.log(BLOCK(
+              `[JWForge State Validator] BLOCKED: Cannot advance from Phase ${oldPhase} to Phase ${newPhase} without completing user gate. ` +
+              `Set waiting_for_user = true via state-recorder before this transition.`
+            ));
+            return;
+          }
+        }
       }
     }
 

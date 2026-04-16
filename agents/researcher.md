@@ -56,6 +56,8 @@ If your role is unfamiliar, use Glob to discover what exists under that name in 
 
 ## Output
 
+Your output file MUST begin with `<!-- _agent: researcher -->` as the very first line (before any Markdown heading). This is the writer identity marker that phase-guard uses to verify the write came from the correct agent.
+
 Write `.jwforge/current/analysis-{role}.md` with this structure:
 
 ```markdown

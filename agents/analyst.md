@@ -56,6 +56,8 @@ Output path: .jwforge/current/task-spec.md
 
 ## Output
 
+Your output file MUST begin with `<!-- _agent: analyst -->` as the very first line (before any Markdown heading). This is the writer identity marker that phase-guard uses to verify the write came from the correct agent.
+
 Write `.jwforge/current/task-spec.md` using `templates/task-spec.md` as the format.
 
 Then return this report as your final response:

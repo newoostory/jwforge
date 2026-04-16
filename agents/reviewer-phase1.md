@@ -50,6 +50,8 @@ Interview log path: .jwforge/current/interview-log.md
 
 ## Output
 
+Your output file MUST begin with `<!-- _agent: reviewer -->` as the very first line (before any Markdown heading). This is the writer identity marker that phase-guard uses to verify the write came from the correct agent.
+
 Return this report as your final response:
 
 ```markdown

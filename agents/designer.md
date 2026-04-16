@@ -63,6 +63,8 @@ Map every R-requirement from task-spec.md to the unit(s) that implement it.
 
 ## Output
 
+Your output file MUST begin with `<!-- _agent: designer -->` as the very first line (before any Markdown heading). This is the writer identity marker that phase-guard uses to verify the write came from the correct agent.
+
 Write `.jwforge/current/architecture.md` using `templates/architecture.md` as the format.
 
 Then return this report as your final response:

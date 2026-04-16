@@ -66,6 +66,8 @@ Previous questions asked: [{list of question texts from all prior rounds}]
 
 ## Output Format
 
+Your output file MUST begin with `<!-- _agent: interviewer -->` as the very first line (before any Markdown heading). This is the writer identity marker that phase-guard uses to verify the write came from the correct agent.
+
 Return your output as your final response:
 
 ```
@@ -96,7 +98,7 @@ Reason: {basis for signal — complete only when all areas ≥90% confidence}
 - Max questions per round: S=3, M=7, L/XL=10
 - No repeat questions — cross-check against `Previous questions asked` field
 - No leading or suggestive questions — neutral tone only
-- Do NOT write code or modify any files
+- Write `.jwforge/current/interview-log.md` after each round, appending the questions you generated and the confidence assessment for that round
 - Do NOT interact with the user
 - Emit `complete` only when confidence across all topic areas is ≥90%
 - You are spawned with `run_in_background: true`

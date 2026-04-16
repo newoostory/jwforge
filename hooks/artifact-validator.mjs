@@ -30,22 +30,28 @@ import { readStdin, getCwd, readState, isPhaseAdvance, ALLOW, BLOCK, JWFORGE_DIR
 
 const REQUIRED_ARTIFACTS_FALLBACK = {
   1: {
-    files: ['task-spec.md'],
+    files: ['task-spec.md', 'review-phase1.md'],
     validators: {
       'task-spec.md': (content) => {
         return content.includes('## Requirements') &&
                content.includes('## Success Criteria') &&
                content.length > 200;
+      },
+      'review-phase1.md': (content) => {
+        return content.length > 50;
       }
     }
   },
   2: {
-    files: ['architecture.md'],
+    files: ['architecture.md', 'review-phase2.md'],
     validators: {
       'architecture.md': (content) => {
         return (content.includes('## Unit') || content.includes('## Task')) &&
                /### (Unit|Task)-\d+/.test(content) &&
                (content.includes('- test_files:') || content.includes('- files:'));
+      },
+      'review-phase2.md': (content) => {
+        return content.length > 50;
       }
     }
   }
@@ -59,7 +65,7 @@ async function main() {
     let data;
     try { data = JSON.parse(raw); } catch { console.log(ALLOW); return; }
 
-    const filePath = data.file_path || data.filePath || data.input?.file_path || '';
+    const filePath = data.tool_input?.file_path || data.input?.file_path || data.file_path || data.filePath || '';
     if (!filePath) { console.log(ALLOW); return; }
 
     // Only validate state.json writes
@@ -76,7 +82,7 @@ async function main() {
     }
 
     // Parse new state from content
-    const newContent = data.content || data.input?.content || '';
+    const newContent = data.tool_input?.content || data.input?.content || data.content || '';
     if (!newContent) { console.log(ALLOW); return; }
 
     let newState;
