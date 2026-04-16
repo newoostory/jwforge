@@ -57,10 +57,9 @@ async function main() {
 
     // Add phase-specific info
     if (state.phase3) {
-      lines.push(`- Current unit: ${state.phase3.current_unit || 0}`);
+      lines.push(`- Running units: ${JSON.stringify(state.phase3.running_units || [])}`);
       lines.push(`- Total units: ${state.phase3.total_units || 0}`);
       lines.push(`- Completed units: ${JSON.stringify(state.phase3.completed_units || [])}`);
-      lines.push(`- Test written: ${state.phase3.current_unit_test_written || false}`);
     }
 
     if (state.phase4) {

@@ -13,7 +13,7 @@
  */
 
 import { execSync } from 'child_process';
-import { readFileSync, writeFileSync, existsSync, unlinkSync, mkdirSync, copyFileSync, rmSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, unlinkSync, mkdirSync, copyFileSync, rmSync, readdirSync } from 'fs';
 import { join } from 'path';
 import { readStdin, getCwd, readState, JWFORGE_DIR, logHookError } from './lib/common.mjs';
 
@@ -42,6 +42,20 @@ const TRANSIENT_FILES = ['.notify-cache.json'];
 function archivePipeline(cwd, state) {
   const currentDir = join(cwd, JWFORGE_DIR, 'current');
   const archiveBase = join(cwd, JWFORGE_DIR, 'archive');
+
+  // Deduplication: if an archive already exists for this pipeline run (same started_at), skip.
+  if (state.started_at && existsSync(archiveBase)) {
+    const alreadyArchived = readdirSync(archiveBase).some(dir => {
+      const metaPath = join(archiveBase, dir, '.archive-meta.json');
+      if (!existsSync(metaPath)) return false;
+      try {
+        const meta = JSON.parse(readFileSync(metaPath, 'utf8'));
+        return meta.started_at === state.started_at;
+      } catch { return false; }
+    });
+    if (alreadyArchived) return;
+  }
+
   const timestamp = new Date().toISOString().replace(/[T:.]/g, '-').slice(0, 19);
   const slug = (state.task || 'unknown').replace(/[^a-zA-Z0-9가-힣]/g, '-').slice(0, 50);
   const archiveName = `${timestamp}-${slug}`;

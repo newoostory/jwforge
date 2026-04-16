@@ -178,39 +178,33 @@ async function main() {
     // Step 7: Read or initialize tdd-state.json
     let tddState = readTddState(cwd);
     if (!tddState || typeof tddState !== 'object' || !tddState.units) {
-      // Corrupt or missing — reinitialize
-      tddState = { current_unit: sortedIds[0], units: {} };
+      tddState = { running_units: [sortedIds[0]], units: {} };
     }
 
-    // Step 8: Get current unit number
-    // Prefer state.json's phase3.current_unit, then tdd-state's current_unit, then first unit
-    let currentUnit;
-    if (state.phase3 && typeof state.phase3.current_unit !== 'undefined') {
-      currentUnit = parseInt(state.phase3.current_unit, 10);
-    } else if (typeof tddState.current_unit !== 'undefined') {
-      currentUnit = parseInt(tddState.current_unit, 10);
+    // Step 8: Get running units (supports parallel execution)
+    // Prefer state.json's phase3.running_units, then tdd-state's running_units, then first unit
+    let runningUnits;
+    if (state.phase3 && Array.isArray(state.phase3.running_units) && state.phase3.running_units.length > 0) {
+      runningUnits = state.phase3.running_units.map(n => parseInt(n, 10)).filter(n => !isNaN(n));
+    } else if (Array.isArray(tddState.running_units) && tddState.running_units.length > 0) {
+      runningUnits = tddState.running_units.map(n => parseInt(n, 10)).filter(n => !isNaN(n));
     } else {
-      currentUnit = sortedIds[0];
+      runningUnits = [sortedIds[0]];
     }
 
-    if (isNaN(currentUnit)) {
-      currentUnit = sortedIds[0];
-    }
+    const completedUnits = Array.isArray(state.phase3?.completed_units)
+      ? state.phase3.completed_units.map(n => parseInt(n, 10))
+      : [];
 
-    // Step 12: On unit transition — if current_unit changed from what's in tdd-state, reset
-    const prevUnit = parseInt(tddState.current_unit, 10);
-    if (!isNaN(prevUnit) && prevUnit !== currentUnit) {
-      // Unit transition: reset tdd-state for the new unit
-      tddState.current_unit = currentUnit;
-      const unitKey = String(currentUnit);
-      tddState.units[unitKey] = initUnitState(currentUnit, units);
-    }
-    tddState.current_unit = currentUnit;
+    // Sync tdd-state running_units
+    tddState.running_units = runningUnits;
 
-    // Ensure current unit exists in tdd-state
-    const currentKey = String(currentUnit);
-    if (!tddState.units[currentKey]) {
-      tddState.units[currentKey] = initUnitState(currentUnit, units);
+    // Ensure all running units have entries in tdd-state
+    for (const unitId of runningUnits) {
+      const unitKey = String(unitId);
+      if (!tddState.units[unitKey]) {
+        tddState.units[unitKey] = initUnitState(unitId, units);
+      }
     }
 
     // Step 9: Normalize the target file path to relative
@@ -243,24 +237,26 @@ async function main() {
       return;
     }
 
-    // Check past / current / future unit status
-    if (matchedUnitId < currentUnit) {
-      // Past unit — ALLOW (fixes to completed units)
+    // Check past / running / future unit status
+    if (completedUnits.includes(matchedUnitId)) {
+      // Completed unit — ALLOW (fixes to completed units)
       console.log(ALLOW);
       return;
     }
 
-    if (matchedUnitId > currentUnit) {
-      // Future unit — BLOCK
+    if (!runningUnits.includes(matchedUnitId)) {
+      // Not in running units and not completed — future unit → BLOCK
       console.log(BLOCK(
-        `[JWForge TDD] Unit ${matchedUnitId} is not active yet. Current unit: ${currentUnit}. ` +
-        `Complete the current unit before moving to the next.`
+        `[JWForge TDD] Unit ${matchedUnitId} is not active yet. ` +
+        `Running units: [${runningUnits.join(', ')}]. ` +
+        `Complete the current level before moving to the next.`
       ));
       return;
     }
 
-    // matchedUnitId === currentUnit
-    const unitState = tddState.units[currentKey];
+    // matchedUnitId is in runningUnits — check TDD order
+    const unitKey = String(matchedUnitId);
+    const unitState = tddState.units[unitKey];
 
     if (matchedRole === 'test') {
       // ALLOW test file writes, record in tests_written

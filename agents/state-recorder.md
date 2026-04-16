@@ -35,6 +35,9 @@ Example diff payloads:
 3. Validate the result against the legal transitions table.
 4. If validation fails, do NOT write. Return an error report.
 5. If validation passes, write the updated state to `.jwforge/current/state.json`.
+   **CRITICAL**: Always include `"_recorder": true` as a top-level field in every write.
+   This is the writer identity marker that state-validator uses to verify the write came
+   from state-recorder. Writes without this field are blocked by the hook.
 6. Return a confirmation report.
 
 ---
@@ -43,6 +46,7 @@ Example diff payloads:
 
 ```json
 {
+  "_recorder": true,
   "pipeline": "forge",
   "task": "string",
   "started_at": "ISO8601",
@@ -69,10 +73,9 @@ Example diff payloads:
   },
   "phase3": {
     "status": "pending|in_progress|done",
-    "current_unit": 0,
+    "running_units": [],
     "total_units": 0,
     "completed_units": [],
-    "current_unit_test_written": false,
     "retries": {}
   },
   "phase4": {

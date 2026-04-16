@@ -100,6 +100,18 @@ async function main() {
       return;
     }
 
+    // === RULE (0): Only state-recorder may write state.json during an active pipeline ===
+    // state-recorder always includes _recorder: true in writes.
+    // Writes lacking this marker are blocked to prevent Conductor from writing state directly.
+    if (currentState.status === 'in_progress' && newState._recorder !== true) {
+      console.log(BLOCK(
+        '[JWForge State Validator] BLOCKED: state.json must only be written by the state-recorder agent. ' +
+        'The Conductor MUST spawn state-recorder (haiku) with the diff payload instead of writing state.json directly. ' +
+        'Rule: ALL state mutations go through state-recorder.'
+      ));
+      return;
+    }
+
     const oldPhase = typeof currentState.phase === 'number' ? currentState.phase : 1;
     const newPhase = typeof newState.phase === 'number' ? newState.phase : 1;
 

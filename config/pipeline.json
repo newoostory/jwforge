@@ -132,10 +132,9 @@
       },
       "phase3": {
         "status": "pending|in_progress|done",
-        "current_unit": "number",
+        "running_units": "number[] — unit IDs currently executing in parallel",
         "total_units": "number",
         "completed_units": "number[]",
-        "current_unit_test_written": "boolean",
         "retries": "object"
       },
       "phase4": {
