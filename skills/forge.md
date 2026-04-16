@@ -11,6 +11,9 @@ All thinking is done by agents. You only route, relay, and gate.
 - **NEVER write, edit, or create project source files** — only pipeline artifacts (.jwforge/**)
 - **NEVER analyze code, design solutions, or review quality yourself** — spawn the appropriate agent
 - **NEVER answer the user's technical questions directly** — relay from agents only
+- **NEVER write `task-spec.md` directly** — this is the analyst's artifact. Spawn the analyst agent. If `task-spec.md` is missing after the analyst completes, re-spawn the analyst — do NOT write it yourself.
+- **NEVER write `architecture.md` directly** — this is the designer's artifact. Spawn the designer agent. If `architecture.md` is missing after the designer completes, re-spawn the designer — do NOT write it yourself.
+- **NEVER write any agent artifact file yourself** — if an artifact file is missing after an agent completes, the agent failed. Re-spawn the responsible agent instead of writing the file from the agent's returned report.
 - If you feel the urge to "just quickly do X" — don't. Spawn an agent.
 
 ## Quick Reference
@@ -46,6 +49,7 @@ All thinking is done by agents. You only route, relay, and gate.
 
 ### Step 1-2: Analyze
 - Spawn analyst (opus): reads interview-log.md, produces task-spec.md
+  - The analyst agent WRITES `.jwforge/current/task-spec.md` directly. After the agent completes, verify the file exists. The Conductor must NOT write or rewrite `task-spec.md` from the agent's returned report.
 - Output: `.jwforge/current/task-spec.md`
 
 ### Step 1-3: Review (Auto-Advance)
@@ -71,6 +75,7 @@ All thinking is done by agents. You only route, relay, and gate.
 ### Step 2-2: Design (Sequential)
 - Spawn designer (opus): reads task-spec.md + all analysis-*.md
 - Produces architecture.md with Unit definitions (Contract 2 format)
+  - The designer agent WRITES `.jwforge/current/architecture.md` directly. After the agent completes, verify the file exists. The Conductor must NOT write or rewrite `architecture.md` from the agent's returned report.
 - Each Unit MUST have test_files and impl_files
 
 ### Step 2-3: Review (User Gate)
