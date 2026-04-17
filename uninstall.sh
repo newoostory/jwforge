@@ -1,102 +1,160 @@
 #!/usr/bin/env bash
-# JWForge Uninstaller v2
+# JWForge Uninstaller
+# Usage: uninstall.sh [<target-project-path>] [--global]
+# Default scope: project-local (reads <target>/.claude/settings.json).
+# --global:      reads ~/.claude/settings.json.
+#
+# Removes ONLY JWForge hook entries (commands containing 'jwforge/hooks/')
+# and the two JWForge env vars from the chosen scope's settings.json,
+# plus the <scope>/.claude/jwforge/ runtime directory. Leaves unrelated
+# hook entries and env vars intact. Idempotent.
 
 set -e
 
 JWFORGE_HOME="$(cd "$(dirname "$0")" && pwd)"
 
-# --- Helpers ---
+TARGET_ARG=""
+GLOBAL=0
 
-to_node_path() {
-  if command -v cygpath &>/dev/null; then
-    cygpath -m "$1"
-  else
-    echo "$1"
-  fi
-}
-
-# --- Parse arguments ---
-
-INSTALL_MODE="global"
-TARGET_PROJECT=""
-
-while [[ $# -gt 0 ]]; do
-  case $1 in
-    --global) INSTALL_MODE="global"; shift ;;
-    --local)
-      INSTALL_MODE="local"
-      if [[ -n "$2" && ! "$2" =~ ^-- ]]; then
-        TARGET_PROJECT="$2"; shift
-      fi
-      shift
-      ;;
-    *) shift ;;
+for arg in "$@"; do
+  case "$arg" in
+    --global) GLOBAL=1 ;;
+    --help|-h)
+      sed -n '2,11p' "$0"; exit 0 ;;
+    --*)
+      echo "Unknown flag: $arg" >&2; exit 2 ;;
+    *)
+      if [ -z "$TARGET_ARG" ]; then TARGET_ARG="$arg"
+      else echo "Unexpected argument: $arg" >&2; exit 2; fi ;;
   esac
 done
 
-if [[ "$INSTALL_MODE" == "global" ]]; then
-  CLAUDE_DIR="$HOME/.claude"
-  echo "JWForge Uninstaller (global)"
-  echo "============================"
-else
-  CLAUDE_DIR="${TARGET_PROJECT:-.}/.claude"
-  echo "JWForge Uninstaller (local)"
-  echo "==========================="
-fi
+# ------------------------------------------------------------------
+# Helpers
+# ------------------------------------------------------------------
 
-RUNTIME_DIR="$CLAUDE_DIR/jwforge"
-SETTINGS_FILE="$CLAUDE_DIR/settings.json"
-SETTINGS_FILE_NODE="$(to_node_path "$SETTINGS_FILE")"
-
-echo "Target: $CLAUDE_DIR"
-echo ""
-
-# --- 1. Remove skills ---
-
-for skill_name in forge jwforge deeptk surface resume retro; do
-  if [ -d "$CLAUDE_DIR/skills/$skill_name" ]; then
-    rm -rf "$CLAUDE_DIR/skills/$skill_name"
-    echo "[OK] /$skill_name skill removed"
+# resolve_scope: populates CLAUDE_DIR, INSTALL_DIR, SETTINGS_FILE, SCOPE_LABEL
+# Mirrors install.sh's resolve_scope: --global -> ~/.claude; else target arg
+# (absolutized) or $PWD; CLAUDE_DIR = <scope>/.claude.
+resolve_scope() {
+  if [ "$GLOBAL" -eq 1 ]; then
+    CLAUDE_DIR="$HOME/.claude"
+    SCOPE_LABEL="global (~/.claude)"
+  else
+    local tgt
+    if [ -n "$TARGET_ARG" ]; then tgt="$TARGET_ARG"
+    else tgt="$PWD"; fi
+    case "$tgt" in
+      /*) ;;
+      *) tgt="$PWD/$tgt" ;;
+    esac
+    CLAUDE_DIR="$tgt/.claude"
+    SCOPE_LABEL="project ($tgt)"
   fi
-done
+  INSTALL_DIR="$CLAUDE_DIR/jwforge"
+  SETTINGS_FILE="$CLAUDE_DIR/settings.json"
+}
 
-# --- 2. Remove runtime files ---
+# clean_settings: parse SETTINGS_FILE, remove JWForge hook entries and env
+# vars, write back pretty-printed JSON. Handles BOTH hook shapes:
+#   (flat)   { matcher, command }
+#   (nested) { matcher, hooks: [ { type, command } ] }
+# A JWForge entry is any one whose `command` string contains 'jwforge/hooks/'.
+# Leaves all other entries and env vars intact. No-op if SETTINGS_FILE missing.
+clean_settings() {
+  if [ ! -f "$SETTINGS_FILE" ]; then return 0; fi
+  SETTINGS_PATH="$SETTINGS_FILE" node -e '
+    const fs = require("fs");
+    const p = process.env.SETTINGS_PATH;
+    let raw;
+    try { raw = fs.readFileSync(p, "utf8").replace(/^\uFEFF/, ""); }
+    catch (e) { process.exit(0); }
+    let settings;
+    try { settings = JSON.parse(raw); } catch (e) { process.exit(0); }
 
-if [ -d "$RUNTIME_DIR" ]; then
-  rm -rf "$RUNTIME_DIR"
-  echo "[OK] Runtime files removed ($RUNTIME_DIR)"
-fi
+    const isJwforgeCmd = (c) =>
+      typeof c === "string" && c.includes("jwforge/hooks/");
 
-# --- 3. Remove hooks (global only) ---
-
-if [[ "$INSTALL_MODE" == "global" ]]; then
-  if [ -f "$SETTINGS_FILE" ] && grep -q "jwforge" "$SETTINGS_FILE" 2>/dev/null; then
-    node -e "
-      const fs = require('fs');
-      const raw = fs.readFileSync('$SETTINGS_FILE_NODE', 'utf8').replace(/^\uFEFF/, '');
-      const settings = JSON.parse(raw);
-      if (settings.hooks) {
-        for (const [event, hooks] of Object.entries(settings.hooks)) {
-          settings.hooks[event] = hooks.filter(h => !h.command || !h.command.includes('jwforge'));
-          if (settings.hooks[event].length === 0) delete settings.hooks[event];
+    if (settings && typeof settings === "object" && settings.hooks &&
+        typeof settings.hooks === "object") {
+      for (const event of Object.keys(settings.hooks)) {
+        const arr = settings.hooks[event];
+        if (!Array.isArray(arr)) continue;
+        const kept = [];
+        for (const entry of arr) {
+          if (!entry || typeof entry !== "object") { kept.push(entry); continue; }
+          // Flat-shape entry with direct command on the entry itself.
+          if (isJwforgeCmd(entry.command)) continue;
+          // Nested-shape entry with entry.hooks[] of { type, command }.
+          if (Array.isArray(entry.hooks)) {
+            const innerKept = entry.hooks.filter(
+              (h) => !(h && typeof h === "object" && isJwforgeCmd(h.command))
+            );
+            if (innerKept.length === 0) continue;
+            entry.hooks = innerKept;
+          }
+          kept.push(entry);
         }
-        if (Object.keys(settings.hooks).length === 0) delete settings.hooks;
+        if (kept.length === 0) delete settings.hooks[event];
+        else settings.hooks[event] = kept;
       }
-      fs.writeFileSync('$SETTINGS_FILE_NODE', JSON.stringify(settings, null, 2));
-    "
-    echo "[OK] All JWForge hooks removed from settings.json"
-  fi
-fi
+      if (Object.keys(settings.hooks).length === 0) delete settings.hooks;
+    }
 
-# --- 5. Clean up leftover team/task directories ---
+    if (settings && typeof settings === "object" && settings.env &&
+        typeof settings.env === "object") {
+      delete settings.env.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS;
+      delete settings.env.CLAUDE_CODE_DISABLE_ADAPTIVE_THINKING;
+      if (Object.keys(settings.env).length === 0) delete settings.env;
+    }
 
-for dir in "$HOME/.claude/teams"/jwforge-* "$HOME/.claude/tasks"/jwforge-*; do
-  if [ -d "$dir" ]; then
-    rm -rf "$dir"
-    echo "[OK] Removed leftover: $(basename "$dir")"
+    fs.writeFileSync(p, JSON.stringify(settings, null, 2));
+  '
+}
+
+# remove_runtime_dir: delete <scope>/.claude/jwforge/ idempotently.
+remove_runtime_dir() {
+  if [ -d "$INSTALL_DIR" ]; then
+    rm -rf "$INSTALL_DIR"
+    echo "  [OK] removed runtime dir: $INSTALL_DIR"
   fi
-done
+}
+
+# remove_forge_skill: delete <scope>/.claude/skills/forge/ idempotently.
+remove_forge_skill() {
+  local d="$CLAUDE_DIR/skills/forge"
+  if [ -d "$d" ]; then
+    rm -rf "$d"
+    echo "  [OK] removed skill dir: $d"
+  fi
+}
+
+# ------------------------------------------------------------------
+# Main
+# ------------------------------------------------------------------
+
+resolve_scope
+
+echo "JWForge Uninstaller"
+echo "==================="
+echo "Scope: $SCOPE_LABEL"
+echo "Settings: $SETTINGS_FILE"
+echo ""
+
+echo "[1/3] Cleaning settings.json (hooks + env vars)..."
+clean_settings || true
+echo "  [OK] settings.json cleaned (if present)"
+
+echo "[2/3] Removing runtime directory..."
+remove_runtime_dir
+echo "  [OK] runtime removal complete"
+
+echo "[3/3] Removing forge skill directory..."
+remove_forge_skill
+echo "  [OK] skill removal complete"
 
 echo ""
-echo "JWForge uninstalled."
-echo "Note: .jwforge/ directories in projects are preserved (delete manually if needed)."
+echo "================================"
+echo "  JWForge uninstalled"
+echo "  scope: $SCOPE_LABEL"
+echo "================================"

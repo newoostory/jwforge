@@ -1,90 +1,72 @@
 #!/usr/bin/env bash
-# JWForge Updater — pulls latest from GitHub and reinstalls
+# JWForge Updater
+# Usage: update.sh
+#
+# Detects an existing JWForge install by scanning for JWForge hook entries
+# (commands containing 'jwforge/hooks/') first in <cwd>/.claude/settings.json
+# (project scope) and then in ~/.claude/settings.json (global scope).
+# Re-runs install.sh against the detected scope. Errors out if neither
+# location shows a JWForge install.
+
 set -e
 
-REPO="newoostory/jwforge"
-JWFORGE_LOCAL="$HOME/jwforge"
+JWFORGE_HOME="$(cd "$(dirname "$0")" && pwd)"
 
-# ── Colors ──
-GRN='\033[92m'; YEL='\033[93m'; RED='\033[91m'; CYN='\033[96m'; RST='\033[0m'; BLD='\033[1m'
+# ------------------------------------------------------------------
+# Helpers
+# ------------------------------------------------------------------
 
-info()  { echo -e "${CYN}[jwforge]${RST} $1"; }
-ok()    { echo -e "${GRN}[  OK  ]${RST} $1"; }
-warn()  { echo -e "${YEL}[ WARN ]${RST} $1"; }
-fail()  { echo -e "${RED}[ FAIL ]${RST} $1"; exit 1; }
+# has_jwforge_install: prints '1' iff the given settings.json file contains
+# any hook `command` string that includes 'jwforge/hooks/'. Handles BOTH
+# the flat { matcher, command } shape and the nested { matcher, hooks: [
+# { type, command } ] } shape. Never fails the script; missing or malformed
+# files print '0'.
+has_jwforge_install() {
+  local settings_path="$1"
+  if [ ! -f "$settings_path" ]; then echo "0"; return 0; fi
+  SETTINGS_PATH="$settings_path" node -e '
+    const fs = require("fs");
+    try {
+      const raw = fs.readFileSync(process.env.SETTINGS_PATH, "utf8").replace(/^\uFEFF/, "");
+      const data = JSON.parse(raw);
+      let hit = false;
+      const walk = (v) => {
+        if (hit) return;
+        if (typeof v === "string") { if (v.includes("jwforge/hooks/")) hit = true; return; }
+        if (Array.isArray(v)) { for (const x of v) walk(x); return; }
+        if (v && typeof v === "object") { for (const k of Object.keys(v)) walk(v[k]); }
+      };
+      walk(data);
+      process.stdout.write(hit ? "1" : "0");
+    } catch (e) { process.stdout.write("0"); }
+  ' 2>/dev/null || echo "0"
+}
 
-# ── Preflight checks ──
+# ------------------------------------------------------------------
+# Main
+# ------------------------------------------------------------------
 
-command -v gh &>/dev/null || fail "gh CLI not found. Install: https://cli.github.com"
-gh auth status &>/dev/null 2>&1 || fail "gh not authenticated. Run: gh auth login"
+echo "JWForge Updater"
+echo "==============="
 
-echo -e "${BLD}${CYN}⚡ JWForge Updater${RST}"
-echo ""
+PROJECT_SETTINGS="$PWD/.claude/settings.json"
+GLOBAL_SETTINGS="$HOME/.claude/settings.json"
 
-# ── Determine current version ──
+PROJECT_HIT="$(has_jwforge_install "$PROJECT_SETTINGS")"
+GLOBAL_HIT="$(has_jwforge_install "$GLOBAL_SETTINGS")"
 
-CURRENT_VER="unknown"
-CURRENT_COMMIT="unknown"
-META_FILE="$HOME/.claude/jwforge/.install-meta.json"
-if [ -f "$META_FILE" ]; then
-  CURRENT_VER=$(node -e "const m=JSON.parse(require('fs').readFileSync('$META_FILE','utf8')); console.log(m.version||'unknown')" 2>/dev/null || echo "unknown")
-  CURRENT_COMMIT=$(node -e "const m=JSON.parse(require('fs').readFileSync('$META_FILE','utf8')); console.log(m.commit||'unknown')" 2>/dev/null || echo "unknown")
-fi
-info "Current version: ${BLD}${CURRENT_VER}${RST} (${CURRENT_COMMIT})"
-
-# ── Strategy: clone/pull to ~/jwforge, then reinstall ──
-
-if [ -d "$JWFORGE_LOCAL/.git" ]; then
-  # Already cloned — pull latest
-  info "Pulling latest from ${BLD}$REPO${RST}..."
-  cd "$JWFORGE_LOCAL"
-  BEFORE=$(git rev-parse HEAD)
-  git pull --ff-only origin main 2>/dev/null || git pull --ff-only origin master 2>/dev/null || fail "git pull failed. Resolve manually in $JWFORGE_LOCAL"
-  AFTER=$(git rev-parse HEAD)
-
-  if [ "$BEFORE" = "$AFTER" ]; then
-    AFTER_SHORT="${AFTER:0:7}"
-    # Also check if the installed commit already matches this commit
-    if [ "$CURRENT_COMMIT" = "$AFTER_SHORT" ] || [ "$CURRENT_COMMIT" = "$AFTER" ]; then
-      ok "Already up to date (${AFTER_SHORT}) — installed version matches repo"
-      echo ""
-      read -p "Reinstall anyway? (y/N) " -n 1 -r
-      echo ""
-      [[ ! $REPLY =~ ^[Yy]$ ]] && { info "No changes. Done."; exit 0; }
-    else
-      ok "No new commits (${AFTER_SHORT}) — but reinstalling to sync installed state"
-    fi
-  else
-    COMMITS=$(git log --oneline "$BEFORE".."$AFTER" | wc -l | tr -d ' ')
-    ok "Updated: ${COMMITS} new commit(s)"
-    git log --oneline "$BEFORE".."$AFTER" | head -5 | while read line; do
-      echo -e "  ${GRN}+${RST} $line"
-    done
-    [ "$COMMITS" -gt 5 ] && echo -e "  ${YEL}... and $((COMMITS - 5)) more${RST}"
-  fi
+if [ "$PROJECT_HIT" = "1" ]; then
+  echo "Detected: project install at $PWD/.claude/"
+  echo "Re-running install.sh against project scope..."
+  bash "$JWFORGE_HOME/install.sh" "$PWD"
+elif [ "$GLOBAL_HIT" = "1" ]; then
+  echo "Detected: global install at $HOME/.claude/"
+  echo "Re-running install.sh --global..."
+  bash "$JWFORGE_HOME/install.sh" --global
 else
-  # Fresh clone
-  info "Cloning ${BLD}$REPO${RST} to $JWFORGE_LOCAL..."
-  gh repo clone "$REPO" "$JWFORGE_LOCAL" -- --depth 1
-  ok "Cloned successfully"
+  echo "ERROR: no JWForge install detected." >&2
+  echo "  Checked: $PROJECT_SETTINGS" >&2
+  echo "  Checked: $GLOBAL_SETTINGS" >&2
+  echo "Run install.sh first (see install.sh --help)." >&2
+  exit 1
 fi
-
-echo ""
-
-# ── Reinstall ──
-
-info "Running installer..."
-cd "$JWFORGE_LOCAL"
-bash install.sh --global
-
-# ── Read new version ──
-
-NEW_VER="unknown"
-NEW_COMMIT="unknown"
-if [ -f "$META_FILE" ]; then
-  NEW_VER=$(node -e "const m=JSON.parse(require('fs').readFileSync('$META_FILE','utf8')); console.log(m.version||'unknown')" 2>/dev/null || echo "unknown")
-  NEW_COMMIT=$(node -e "const m=JSON.parse(require('fs').readFileSync('$META_FILE','utf8')); console.log(m.commit||'unknown')" 2>/dev/null || echo "unknown")
-fi
-
-echo ""
-echo -e "${BLD}${GRN}⚡ JWForge updated: ${CURRENT_VER} (${CURRENT_COMMIT}) → ${NEW_VER} (${NEW_COMMIT})${RST}"
