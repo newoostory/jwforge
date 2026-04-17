@@ -19,11 +19,14 @@
 
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
 import { join } from 'path';
-import { readStdin, getCwd, readState, ALLOW, ALLOW_MSG, JWFORGE_DIR, logHookError } from './lib/common.mjs';
+import { readStdin, getCwd, readState, shouldSkipHook, ALLOW, ALLOW_MSG, JWFORGE_DIR, logHookError } from './lib/common.mjs';
 
 async function main() {
   try {
     await readStdin(); // consume stdin
+
+    // Fast-path: skip all pipeline logic when no .jwforge/ directory is present
+    if (shouldSkipHook(process.cwd())) { process.exit(0); }
 
     const cwd = getCwd();
     const stateDir = join(cwd, JWFORGE_DIR, 'current');

@@ -10,7 +10,7 @@
  * Fail-open: any parse/read error results in ALLOW.
  */
 
-import { readStdin, getCwd, readState, ALLOW, BLOCK, logHookError } from './lib/common.mjs';
+import { readStdin, getCwd, readState, readLockFile, isLockStale, shouldSkipHook, ALLOW, BLOCK, logHookError } from './lib/common.mjs';
 
 async function main() {
   try {
@@ -20,13 +20,25 @@ async function main() {
     let data;
     try { data = JSON.parse(raw); } catch { console.log(ALLOW); return; }
 
+    // Fast-path: skip all pipeline logic when no .jwforge/ directory is present
+    if (shouldSkipHook(process.cwd())) { process.stdout.write(ALLOW); process.exit(0); }
+
     const cwd = getCwd();
     const state = readState(cwd);
+    const pipelineActive = state?.status === 'in_progress';
 
-    // Only enforce during active pipeline
-    if (!state || state.status !== 'in_progress') {
-      console.log(ALLOW);
-      return;
+    if (!pipelineActive) {
+      // Pipeline not actively in_progress — but check if it's being initialized
+      // or resumed (lock file present and not stale means /forge was triggered).
+      // Without this check, agents spawned before state-recorder writes "in_progress"
+      // bypass enforcement (race condition on pipeline start/resume).
+      const lockData = readLockFile(cwd);
+      if (!lockData || isLockStale(lockData)) {
+        // No active pipeline lock — nothing to enforce
+        console.log(ALLOW);
+        return;
+      }
+      // Lock present and fresh: pipeline is initializing/resuming — enforce
     }
 
     const input = data.tool_input || data.input || {};

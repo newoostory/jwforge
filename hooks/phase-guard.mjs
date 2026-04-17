@@ -27,6 +27,7 @@ import {
   checkPipelineLock,
   evaluatePhaseGuard,
   getArtifactOwner,
+  shouldSkipHook,
   ALLOW,
   BLOCK,
   ALLOW_MSG,
@@ -165,6 +166,9 @@ async function main() {
 
     let data;
     try { data = JSON.parse(raw); } catch { console.log(ALLOW); return; }
+
+    // Fast-path: skip all pipeline logic when no .jwforge/ directory is present
+    if (shouldSkipHook(process.cwd())) { process.stdout.write(ALLOW); process.exit(0); }
 
     const cwd = getCwd();
 

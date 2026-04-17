@@ -24,7 +24,7 @@
 
 import { readFileSync, existsSync } from 'fs';
 import { join, basename } from 'path';
-import { readStdin, getCwd, readState, isPhaseAdvance, ALLOW, BLOCK, JWFORGE_DIR, logHookError } from './lib/common.mjs';
+import { readStdin, getCwd, readState, isPhaseAdvance, shouldSkipHook, ALLOW, BLOCK, JWFORGE_DIR, logHookError } from './lib/common.mjs';
 
 // --- Hardcoded fallback: required artifacts per COMPLETING phase (oldPhase) ---
 
@@ -64,6 +64,9 @@ async function main() {
 
     let data;
     try { data = JSON.parse(raw); } catch { console.log(ALLOW); return; }
+
+    // Fast-path: skip all pipeline logic when no .jwforge/ directory is present
+    if (shouldSkipHook(process.cwd())) { process.stdout.write(ALLOW); process.exit(0); }
 
     const filePath = data.tool_input?.file_path || data.input?.file_path || data.file_path || data.filePath || '';
     if (!filePath) { console.log(ALLOW); return; }

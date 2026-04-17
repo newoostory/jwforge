@@ -22,7 +22,7 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
 import { join } from 'path';
 import {
   readStdin, getCwd, readState, parseTddUnits,
-  isPipelineArtifact, ALLOW, BLOCK, ALLOW_MSG, JWFORGE_DIR, logHookError
+  isPipelineArtifact, shouldSkipHook, ALLOW, BLOCK, ALLOW_MSG, JWFORGE_DIR, logHookError
 } from './lib/common.mjs';
 
 // ---------------------------------------------------------------------------
@@ -126,6 +126,9 @@ async function main() {
 
     let data;
     try { data = JSON.parse(raw); } catch { console.log(ALLOW); return; }
+
+    // Fast-path: skip all pipeline logic when no .jwforge/ directory is present
+    if (shouldSkipHook(process.cwd())) { process.stdout.write(ALLOW); process.exit(0); }
 
     const filePath = data.tool_input?.file_path || data.input?.file_path || data.file_path || data.filePath || '';
 

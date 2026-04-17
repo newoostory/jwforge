@@ -22,6 +22,7 @@ import {
   readStdin,
   getCwd,
   readState,
+  shouldSkipHook,
   ALLOW,
   BLOCK,
   JWFORGE_DIR,
@@ -68,6 +69,9 @@ async function main() {
 
     let data;
     try { data = JSON.parse(raw); } catch { console.log(ALLOW); return; }
+
+    // Fast-path: skip all pipeline logic when no .jwforge/ directory is present
+    if (shouldSkipHook(process.cwd())) { process.stdout.write(ALLOW); process.exit(0); }
 
     // Extract file_path from Write tool event
     const filePath = data.tool_input?.file_path || data.input?.file_path || '';

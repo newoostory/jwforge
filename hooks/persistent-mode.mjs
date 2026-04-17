@@ -12,7 +12,7 @@
 
 import { readFileSync, existsSync } from 'fs';
 import { join } from 'path';
-import { readStdin, getCwd, ALLOW, BLOCK, logHookError } from './lib/common.mjs';
+import { readStdin, getCwd, shouldSkipHook, ALLOW, BLOCK, logHookError } from './lib/common.mjs';
 
 function isContextLimitStop(data) {
   const reasons = [data.stop_reason, data.stopReason, data.reason]
@@ -33,6 +33,9 @@ async function main() {
     const raw = await readStdin();
     let data = {};
     try { data = JSON.parse(raw); } catch { /* empty */ }
+
+    // Fast-path: skip all pipeline logic when no .jwforge/ directory is present
+    if (shouldSkipHook(process.cwd())) { process.exit(0); }
 
     // Never block context limit or user abort stops
     if (isContextLimitStop(data) || isUserAbort(data)) {

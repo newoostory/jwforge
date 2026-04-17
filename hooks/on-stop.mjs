@@ -15,7 +15,7 @@
 import { execSync } from 'child_process';
 import { readFileSync, writeFileSync, existsSync, unlinkSync, mkdirSync, copyFileSync, rmSync, readdirSync } from 'fs';
 import { join } from 'path';
-import { readStdin, getCwd, readState, JWFORGE_DIR, logHookError } from './lib/common.mjs';
+import { readStdin, getCwd, readState, shouldSkipHook, JWFORGE_DIR, logHookError } from './lib/common.mjs';
 
 // Pipeline artifact files worth archiving (excludes transient caches)
 const ARTIFACT_FILES = [
@@ -107,6 +107,10 @@ function archivePipeline(cwd, state) {
 async function main() {
   try {
     const input = await readStdin();
+
+    // Fast-path: skip all pipeline logic when no .jwforge/ directory is present
+    if (shouldSkipHook(process.cwd())) { process.exit(0); }
+
     const cwd = getCwd();
     const state = readState(cwd);
 

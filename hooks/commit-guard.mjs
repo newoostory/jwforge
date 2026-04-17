@@ -20,6 +20,7 @@ import {
   getCwd,
   readState,
   checkPipelineLock,
+  shouldSkipHook,
   ALLOW,
   BLOCK,
   logHookError,
@@ -88,6 +89,9 @@ async function main() {
 
     let data;
     try { data = JSON.parse(raw); } catch { console.log(ALLOW); return; }
+
+    // Fast-path: skip all pipeline logic when no .jwforge/ directory is present
+    if (shouldSkipHook(process.cwd())) { process.stdout.write(ALLOW); process.exit(0); }
 
     // Extract command from Bash tool event
     const command = data.tool_input?.command || data.input?.command || data.command || '';

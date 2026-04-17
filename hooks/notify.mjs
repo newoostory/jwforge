@@ -16,7 +16,7 @@
 import { execFileSync } from 'child_process';
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
 import { join, resolve } from 'path';
-import { readStdin, getCwd } from './lib/common.mjs';
+import { readStdin, getCwd, shouldSkipHook } from './lib/common.mjs';
 
 function sendNotification(title, body) {
   try {
@@ -181,6 +181,9 @@ async function main() {
       console.log(JSON.stringify({ continue: true }));
       return;
     }
+
+    // Fast-path: skip all pipeline logic when no .jwforge/ directory is present
+    if (shouldSkipHook(process.cwd())) { process.exit(0); }
 
     // Distinguish Stop vs PostToolUse by hook_type or presence of tool_name
     const hookType = data?.hook_event_name || data?.hook_type || '';
