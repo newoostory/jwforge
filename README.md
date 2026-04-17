@@ -22,7 +22,19 @@ git clone https://github.com/newoostory/jwforge.git ~/jwforge
 bash ~/jwforge/install.sh
 ```
 
+**Project-scoped install (default):** `./install.sh [target-path]` writes hooks to `<target>/.claude/settings.json`. Defaults to the current working directory when no path is given.
+
+**Global install (opt-in):** Pass `--global` to write to `~/.claude/settings.json` instead. You will be prompted for confirmation via `/dev/tty`.
+
+**Dry-run:** Pass `--dry-run` to print the planned changes without writing anything.
+
 **요구사항:** Node.js, Claude Code CLI
+
+### Windows
+POSIX shell required; Windows users must use WSL. See the [WSL install guide](https://learn.microsoft.com/en-us/windows/wsl/install) to get started.
+
+### Migration
+Run `./uninstall.sh --global` to remove the old global installation, then run `./install.sh` inside your project directory to switch to the project-scoped layout.
 
 ## 업데이트
 
@@ -120,3 +132,7 @@ jwforge/
 ├── config/pipeline.json # 파이프라인 설정, 모델 배정
 └── templates/          # 산출물 템플릿
 ```
+
+---
+
+See [LICENSE](LICENSE) — MIT.

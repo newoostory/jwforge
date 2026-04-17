@@ -3,6 +3,10 @@
 This project is a **multi-agent orchestration pipeline** for Claude Code.
 When a JWForge pipeline is active, **ALL work MUST follow the pipeline phases**.
 
+## Install
+
+JWForge uses a **project-scoped install by default**: `./install.sh [target-path]` writes hooks to `<target>/.claude/settings.json` (defaults to CWD). Pass `--global` to opt into the legacy global install (`~/.claude/settings.json`). The global install path is no longer the default.
+
 ## Active Pipeline Detection
 
 Before doing ANY work, check if `.jwforge/current/state.json` exists and has `"status": "in_progress"`.
