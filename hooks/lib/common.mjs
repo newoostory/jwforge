@@ -397,6 +397,29 @@ export function evaluatePhaseGuard(state, { filePath, command, cwd }) {
   }
 }
 
+// --- Hook Fast-Path Helper ---
+
+/**
+ * Returns true when this cwd does NOT contain a .jwforge/ directory,
+ * meaning no active pipeline exists and the hook can be skipped entirely.
+ *
+ * Fail-closed: returns false when cwd is invalid, does not exist,
+ * or any FS error occurs — so the real hook runs instead of being skipped
+ * on ambiguous state.
+ *
+ * @param {string} cwd - Project root directory (absolute path).
+ * @returns {boolean} true = skip hook; false = run hook.
+ */
+export function shouldSkipHook(cwd) {
+  try {
+    if (typeof cwd !== 'string' || cwd.length === 0) return false;
+    if (!existsSync(cwd)) return false;
+    return !existsSync(join(cwd, '.jwforge'));
+  } catch {
+    return false;
+  }
+}
+
 // --- TDD Unit Parser ---
 
 /**
