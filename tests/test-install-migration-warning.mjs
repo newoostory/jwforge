@@ -92,6 +92,35 @@ describe('install.sh migration warning (Unit-1 / SC8 / DD3)', () => {
     );
   });
 
+  it('prints migration warning when fake HOME has a jwforge hook entry in production quoted shape (Defect 1 regression)', { timeout: 15_000 }, async () => {
+    // Regression test: install.sh writes commands of the form
+    //   node "<INSTALL_DIR>"/hooks/<name>.mjs
+    // where INSTALL_DIR ends in `.../jwforge`. The final command string contains
+    // `jwforge"/hooks/` (with `"` between jwforge and /hooks/), NOT the bare
+    // substring `jwforge/hooks/`. The detector MUST normalize away quotes before
+    // substring match so it finds this real shape.
+    const fakeHome = createFakeHome([
+      {
+        matcher: 'Edit',
+        hooks: [
+          {
+            type: 'command',
+            command: 'node "/home/user/.claude/jwforge"/hooks/phase-guard.mjs',
+          },
+        ],
+      },
+    ]);
+
+    const { code, stdout, stderr } = await runInstallWithFakeHome(fakeHome);
+
+    assert.equal(code, 0, `Expected exit 0. stdout=${stdout} stderr=${stderr}`);
+
+    assert.ok(
+      stdout.includes(MIGRATION_WARNING),
+      `Expected stdout to contain migration warning for the production quoted command shape.\nGot:\n${stdout}`
+    );
+  });
+
   it('does NOT print migration warning when fake HOME has no jwforge hook entries', { timeout: 15_000 }, async () => {
     // Seed the fake HOME with a settings.json that has ONLY unrelated hook entries.
     const fakeHome = createFakeHome([

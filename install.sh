@@ -65,9 +65,13 @@ migration_check() {
       const raw = fs.readFileSync(process.env.SETTINGS_PATH, "utf8").replace(/^\uFEFF/, "");
       const data = JSON.parse(raw);
       let hit = false;
+      const isJwforgeCmd = (c) => {
+        if (typeof c !== "string") return false;
+        return c.replace(/["\\]/g, "").includes("jwforge/hooks/");
+      };
       const walk = (v) => {
         if (hit) return;
-        if (typeof v === "string") { if (v.includes("jwforge/hooks/")) hit = true; return; }
+        if (typeof v === "string") { if (isJwforgeCmd(v)) hit = true; return; }
         if (Array.isArray(v)) { for (const x of v) walk(x); return; }
         if (v && typeof v === "object") { for (const k of Object.keys(v)) walk(v[k]); }
       };

@@ -72,8 +72,10 @@ clean_settings() {
     let settings;
     try { settings = JSON.parse(raw); } catch (e) { process.exit(0); }
 
-    const isJwforgeCmd = (c) =>
-      typeof c === "string" && c.includes("jwforge/hooks/");
+    const isJwforgeCmd = (c) => {
+      if (typeof c !== "string") return false;
+      return c.replace(/["\\]/g, "").includes("jwforge/hooks/");
+    };
 
     if (settings && typeof settings === "object" && settings.hooks &&
         typeof settings.hooks === "object") {

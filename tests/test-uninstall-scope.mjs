@@ -235,6 +235,91 @@ describe('uninstall.sh scope-aware removal (Unit-4 / R6, SC6)', () => {
     );
   });
 
+  it('removes JWForge hook entries using production quoted command shape (regression for Defect 1)', { timeout: 20_000 }, async (t) => {
+    // Regression test: install.sh writes commands of the form
+    //   node "<INSTALL_DIR>"/hooks/<name>.mjs
+    // where INSTALL_DIR ends in `.../jwforge`. The final command string therefore
+    // contains `jwforge"/hooks/` (with a `"` between jwforge and /hooks/), NOT
+    // the bare substring `jwforge/hooks/`. The detector MUST normalize away
+    // quotes/backslashes before substring match so it finds this real shape.
+    const projectDir = mkdtempSync(join(tmpdir(), 'jw-uninstall-quoted-'));
+    const fakeHome = mkdtempSync(join(tmpdir(), 'jw-uninstall-quoted-home-'));
+
+    t.after(() => {
+      rmSync(projectDir, { recursive: true, force: true });
+      rmSync(fakeHome, { recursive: true, force: true });
+    });
+
+    const claudeDir = join(projectDir, '.claude');
+    const jwforgeDir = join(claudeDir, 'jwforge');
+    mkdirSync(jwforgeDir, { recursive: true });
+    writeFileSync(join(jwforgeDir, 'dummy.txt'), 'runtime artifact');
+
+    // Seed settings.json with a JWForge hook entry in the REAL production
+    // quoted shape (what install.sh actually writes) plus an unrelated hook.
+    const quotedCommand = `node "${projectDir}/.claude/jwforge"/hooks/phase-guard.mjs`;
+    const settings = {
+      hooks: {
+        PreToolUse: [
+          {
+            matcher: 'Edit',
+            hooks: [
+              { type: 'command', command: quotedCommand },
+            ],
+          },
+          {
+            matcher: 'Bash',
+            hooks: [
+              { type: 'command', command: '/usr/local/bin/my-other-hook.sh' },
+            ],
+          },
+        ],
+      },
+      env: {
+        CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: '1',
+        CLAUDE_CODE_DISABLE_ADAPTIVE_THINKING: '1',
+        MY_UNRELATED_VAR: 'keep-me',
+      },
+    };
+    const settingsPath = join(claudeDir, 'settings.json');
+    writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
+
+    seedFakeHome(fakeHome);
+
+    const { code, stdout, stderr } = await runUninstall([projectDir], { homeDir: fakeHome });
+    assert.equal(code, 0, `uninstall.sh exited ${code}.\nstdout=${stdout}\nstderr=${stderr}`);
+
+    const out = JSON.parse(readFileSync(settingsPath, 'utf8'));
+
+    // Flatten nested { matcher, hooks: [{ type, command }] } entries too.
+    const allCommands = [];
+    for (const arr of Object.values(out.hooks ?? {})) {
+      for (const entry of arr) {
+        if (entry?.command) allCommands.push(entry.command);
+        if (Array.isArray(entry?.hooks)) {
+          for (const h of entry.hooks) if (h?.command) allCommands.push(h.command);
+        }
+      }
+    }
+
+    // JWForge hook entry (quoted shape) must be gone
+    const stillPresent = allCommands.find((c) => c === quotedCommand);
+    assert.equal(
+      stillPresent,
+      undefined,
+      `Quoted JWForge hook entry must be removed (Defect 1 regression).\nRemaining commands: ${JSON.stringify(allCommands, null, 2)}`
+    );
+
+    // Unrelated hook must survive
+    const survived = allCommands.find((c) => c.includes('my-other-hook.sh'));
+    assert.ok(survived != null, 'Unrelated hook entry must remain in settings.json');
+
+    // Env vars cleaned
+    assert.equal(out.env?.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS, undefined);
+    assert.equal(out.env?.CLAUDE_CODE_DISABLE_ADAPTIVE_THINKING, undefined);
+    assert.equal(out.env?.MY_UNRELATED_VAR, 'keep-me');
+  });
+
   it('idempotency: second run exits 0 and leaves filesystem unchanged', { timeout: 30_000 }, async (t) => {
     const projectDir = mkdtempSync(join(tmpdir(), 'jw-uninstall-idem-'));
     const fakeHome = mkdtempSync(join(tmpdir(), 'jw-uninstall-idem-home-'));
