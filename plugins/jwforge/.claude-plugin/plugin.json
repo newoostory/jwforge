@@ -1,0 +1,8 @@
+{
+  "name": "jwforge",
+  "description": "Personal AI pair-programming flow: brainstorm → analyze → plan → parallel TDD (4 agents, 5 stages) → lightweight review.",
+  "author": {
+    "name": "newoostory",
+    "email": "newoostory811@gmail.com"
+  }
+}

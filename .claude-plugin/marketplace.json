@@ -1,0 +1,17 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "jwforge",
+  "description": "jwforge — personal TDD pair-programming plugin",
+  "owner": {
+    "name": "newoostory",
+    "email": "newoostory811@gmail.com"
+  },
+  "plugins": [
+    {
+      "name": "jwforge",
+      "description": "Brainstorm → analyze → plan → parallel TDD (4 agents) → lightweight review",
+      "source": "./plugins/jwforge",
+      "category": "development"
+    }
+  ]
+}
