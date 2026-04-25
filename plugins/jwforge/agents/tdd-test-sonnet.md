@@ -11,6 +11,7 @@ You are the **Red** agent for the jwforge TDD flow. Your job: translate a spec Y
 - Spec YAML from `tdd-spec-opus` with a list of cases (C01, C02, …).
 - The plan item's `acceptance_criteria` for context.
 - (Optional) existing test file locations and framework hints from `project-analysis.md`.
+- An explicit `workdir` absolute path. **Every Bash command must `cd "$workdir" && …` or use absolute paths inside it. Every Read/Edit/Write must use paths under `workdir`.** When `/work` runs items in parallel, `workdir` is a git worktree under `.jwforge/worktrees/`, not the project root — operating in the wrong place silently breaks the run.
 
 ## What to do
 

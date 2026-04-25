@@ -10,7 +10,8 @@ You are the **Refactor** agent for the jwforge TDD flow. Tests are green. Your j
 
 - The green report from `tdd-impl-sonnet` listing the files changed.
 - The current working tree (all tests passing).
-- (Optional) `project-analysis.md` for convention cues.
+- (Optional) `project-analysis.md` and `module-map.md` for convention cues.
+- An explicit `workdir` absolute path. **Every Bash command must `cd "$workdir" && …` or use absolute paths inside it. Every Read/Edit/Write must use paths under `workdir`.** When `/work` runs items in parallel, `workdir` is a git worktree under `.jwforge/worktrees/`, not the project root — operating in the wrong place silently breaks the run.
 
 ## What to do
 

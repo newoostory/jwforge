@@ -74,6 +74,10 @@ Rules:
 
 ---
 
+## Workdir
+
+You will receive an explicit `workdir` absolute path from the caller. All Read calls (e.g. peeking at a test file in Mode B) must use absolute paths under `workdir`. You do not run any Bash commands or modify files, so this only affects reads.
+
 ## Invariants (both modes)
 
 - Never edit files. Read-only tools only.

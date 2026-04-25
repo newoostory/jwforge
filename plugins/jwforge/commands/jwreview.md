@@ -3,7 +3,7 @@ description: Re-run the lightweight review (security + lint + light scan). Usefu
 argument-hint: [archive-dir-name]
 ---
 
-You are re-running **only the review portion** of the jwforge flow. This is Step 3 of `/work`, standalone.
+You are re-running **only the review portion** of the jwforge flow. This is Step 4 of `/work`, standalone.
 
 ## Step 1 — Pick a target
 
@@ -19,10 +19,10 @@ From the target `work-log/` folder, read every `*/green.md` and `*/refactor.md` 
 
 ## Step 3 — Run the three review steps
 
-Identical to `/work` Step 3:
+Identical to `/work` Step 4:
 
 1. **security-review skill** (Skill tool).
-2. **Lint/type-check** from `project-analysis.md` → `Lint Tools` section.
+2. **Lint/type-check** — read `Lint Tools` section from `.jwforge/project-analysis.md`. Run every command listed. Skip if the file is absent.
 3. **Light check subagent** — Haiku or Opus, same prompt template as `/work`.
 
 ## Step 4 — Write result
@@ -38,4 +38,4 @@ If any high severity → print banner.
 
 - Do NOT modify source files or archive layout.
 - Do NOT run TDD agents.
-- Do NOT incrementally update `project-analysis.md` — `/jwreview` is read-only on the codebase.
+- Do NOT incrementally update analysis files — `/jwreview` is read-only on the codebase.
